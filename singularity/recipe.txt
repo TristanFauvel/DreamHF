@@ -1,0 +1,30 @@
+Bootstrap: docker
+# Use Bioconductor as base image
+FROM: bioconductor/bioconductor_docker:devel
+
+%labels
+  Version v2.0
+
+%help
+  Singularity image for DreamChallenge
+
+%post
+
+# Already installed in the image: "BiocManager", "survival"
+# Part of other dependencies: "magrittr" (tidyverse),
+
+## Install CRAN packages
+R --slave  -e 'install.packages(c("tidyverse", "yaml", "survminer",  "Hmisc", "smoothHR", "reshape2", "ggsci", "openxlsx", "randomForestSRC", "survivalROC", "ResourceSelection", "GGally"))'
+
+## Install Bioconductor packages
+R --slave  -e 'BiocManager::install(c("SIAMCAT", "microbiome"))'
+
+## NOT USED AND NEEDED HERE
+
+# Update apt-get
+#RUN apt-get update \
+#	&& apt-get install -y --no-install-recommends apt-utils \
+#	&& apt-get install -y --no-install-recommends \
+#	 \
+#	&& apt-get clean \
+#	&& rm -rf /var/lib/apt/lists/*
