@@ -18,11 +18,10 @@ def pheno_processing_pipeline(df):
 
     df = encode_categorical(df, columns = ['Smoking', 'BPTreatment', 'PrevalentDiabetes', 'PrevalentCHD', 'PrevalentHFAIL', 'Sex'])
      
-    # Remove PrevalentHFAIL=1
+    # Remove column PrevalentHFAIL=1
     df.pop('PrevalentHFAIL=1') 
     
-    
-    df  = df.loc[df.loc[:,'Event_time']>=0, :]   
+    #df  = df.loc[df.loc[:,'Event_time']>=0, :]   
     
     #X = df.loc[:,['Age', 'BodyMassIndex', 'Smoking=1', 'BPTreatment=1',
     #   'PrevalentDiabetes=1', 'PrevalentCHD=1', 'SystolicBP', 'NonHDLcholesterol', 'Sex=1']] 
