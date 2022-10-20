@@ -4,3 +4,5 @@
 .Rproj.user
 R_baseline/
 TODO.md
+config.py
+*.zip
