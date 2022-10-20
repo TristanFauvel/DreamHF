@@ -1,3 +1,5 @@
 *.csv
 *.odt
 *.sif
+.Rproj.user
+R_baseline/

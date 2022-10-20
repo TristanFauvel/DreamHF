@@ -5,27 +5,36 @@ from scipy.stats import chi2
 
 def HosmerLemeshow(data, predictions, Q=10):
     """Hosmer-Lemeshow goodness of fit test
-
-
     Parameters
     ----------
     data : Dataframe
         Dataframe containing :
-            - the effective of each group n
-            - for each group, the number of cases where c = 1, n1
+            - the effective of each group in the first column
+            - for each group, the number of cases where c = 1 in the second column
     predictions : Dataframe
-        Dataframe containing :
-            - for each group, the predicted proportion of c = 1 according to a logistic regression, p1
+        Dataframe, numpy array or list containing :
+            - for each group, the predicted proportion of c = 1 according to a logistic regression
     Q : int, optional
         The number of groups
 
     Returns
     -------
-    result : the result of the test, including Chi2-HL statistics and p-value 
+    result : the result of the test, including Chi2-HL statistics and p-value
 
     """
 
-    data.loc[:, "expected_prop"] = predictions.p1
+    # Check the input formats :
+    if not isinstance(data, pd.DataFrame):
+        raise TypeError("data must be a dataframe")
+    
+    # Rename the data DataFrame columns
+    data.columns = ['n', 'n1']
+    
+    if isinstance(predictions, pd.DataFrame):
+        data.loc[:, "expected_prop"] = predictions.to_numpy().flatten()
+    elif isinstance(predictions, list) or isinstance(predictions, np.ndarray):
+        data.loc[:, "expected_prop"] = predictions
+    
     data = data.sort_values(by="expected_prop", ascending=False)
 
     categories, bins = pd.cut(
@@ -71,3 +80,19 @@ def HosmerLemeshow(data, predictions, Q=10):
         columns=["df", "Chi2", "p - value"],
     )
     return result
+
+
+def reformat_inputs(X,c):
+    """
+    Change the input format from (x,c) pairs to (group, proportions of c = 1)
+    """     
+    data = pd.DataFrame(X)
+     
+    data.loc[:,'n'] = np.ones(len(c))
+    data.loc[:,'n1'] = c
+    
+    names=  {i:str(i) for i in range(X.shape[1])}
+    data = data.rename(columns=names)    
+    data = data.groupby(list(data.columns[:-2])).sum()   
+    
+    return data
