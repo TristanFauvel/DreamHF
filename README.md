@@ -41,7 +41,7 @@ In that case, the predictions generated are saved to `/output/scores.csv`.
 ### Instruction to build the singularity container from the recipe.txt
 In the `singularity/` folder, run :
 
-    sudo singularity build container.sif recipe.txt
+    sudo singularity build --force container.sif recipe.txt
 ### Content
 
 - `singularity/`: singularity container

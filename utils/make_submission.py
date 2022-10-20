@@ -8,7 +8,7 @@ from os.path import basename
 import shutil
 import pathlib
 
-load_dotenv("./utils/.env")
+load_dotenv()
 
 submission_name = os.environ.get("submission_name")
 

@@ -9,25 +9,26 @@ FROM: bioconductor/bioconductor_docker:devel
   Singularity image for DreamChallenge
 
 %post
-
-# Already installed in the image: "BiocManager", "survival"
-# Part of other dependencies: "magrittr" (tidyverse),
-
-## Install CRAN packages
-R --slave  -e 'install.packages(c("tidyverse", "yaml", "survminer",  "Hmisc", "smoothHR", "reshape2", "ggsci", "openxlsx", "randomForestSRC", "survivalROC", "ResourceSelection", "GGally"))'
-
-## Install Bioconductor packages
-R --slave  -e 'BiocManager::install(c("SIAMCAT", "microbiome"))'
-
-## NOT USED AND NEEDED HERE
-
-# Update apt-get
-#RUN apt-get update \
-	## Install the required python packages
+## Install the required python packages
 	pip install numpy==1.21.5
 	pip install pandas==1.3.5
 	pip install scikit_survival==0.17.2
 	pip install scipy==1.7.3 
+	pip install python-dotenv==0.21.0
+	pip install scikit_learn==1.1.2
+	pip install synapseclient==2.7.0
+
+%runscript
+	if [ $# -ne 1 ]; then
+		echo "Please provide an input directory."
+		exit 1
+	fi
+		python3 src/model.py
+	    
+## NOT USED AND NEEDED HERE
+
+# Update apt-get
+#RUN apt-get update \
 #	&& apt-get install -y --no-install-recommends apt-utils \
 #	&& apt-get install -y --no-install-recommends \
 #	 \
