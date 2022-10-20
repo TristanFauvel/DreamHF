@@ -43,10 +43,15 @@ def readcounts_processing_pipeline(df):
 def prepare_train_test(df_train, df_test, covariates):
     
     # Left truncation : we remove all participants who experienced HF before entering the study.
-    X_train = df_train.loc[df_train.loc[:,'Event_time']>=0, covariates]
-    X_test = df_test.loc[df_test.loc[:,'Event_time']>=0,covariates]    
+    
+    selection_train = (df_train.loc[:,'Event_time']>=0)
+    selection_test = (df_test.loc[:,'Event_time']>=0)
+    X_train = df_train.loc[selection_train, covariates]
+    X_test = df_test.loc[selection_test,covariates]    
     y_train = df_train.loc[df_train.loc[:,'Event_time']>=0,['Event', 'Event_time']]
     y_test = df_test.loc[df_test.loc[:,'Event_time']>=0,['Event', 'Event_time']]
+    
+    test_sample_ids = df_test.loc[selection_test, :].index  
     
     """
     X_train = df_train.loc[:, covariates]
@@ -57,7 +62,7 @@ def prepare_train_test(df_train, df_test, covariates):
     y_train =y_train.to_records(index = False)
     y_test =y_test.to_records(index = False)
     
-    return X_train, X_test, y_train, y_test
+    return X_train, X_test, y_train, y_test, test_sample_ids
 
 
 def remove_unique_columns(readcounts_df_train, readcounts_df_test):
