@@ -54,10 +54,17 @@ Singularity> Rscript src/baselineModels.R
 In that case, the predictions generated are saved to `/output/scores.csv`.
 
 ### Instruction to build the singularity container from the recipe.txt
-In the `singularity/` folder, run :
+To create the executable singularity container (which contains the code), run :
 
 ```bash
-sudo singularity build --force example.sif recipe.txt
+./build_container.sh
+```
+
+
+To test the executable singularity container (which contains the code), run :
+
+```bash
+./test_container.sh
 ```
 
 ### Content

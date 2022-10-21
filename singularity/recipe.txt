@@ -6,7 +6,13 @@ FROM: python:latest
 
 %help
   Singularity image for DreamChallenge
-      
+  
+%setup
+	mkdir -p ${SINGULARITY_ROOTFS}/src
+	
+%files   
+    	./src/* /src
+    	
 %post
 ## Install the required python packages
 	pip install numpy==1.21.5
@@ -20,9 +26,9 @@ FROM: python:latest
 	if [ $# -ne 1 ]; then
 		echo "No input directory provided, default is ./"
 		STR=$(pwd)
-		python3 ./src/model.py "${STR}"
+		python3 ${SINGULARITY_ROOTFS}/src/model.py "${STR}"
 	else
-		python3 src/model.py $1
+		python3 ${SINGULARITY_ROOTFS}/src/model.py $1
 	fi
 	
 # Update apt-get

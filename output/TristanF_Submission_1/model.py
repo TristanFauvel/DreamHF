@@ -1,6 +1,15 @@
 # This is the model submitted for evaluation in the challenge
 # %%
 import sys
+import os
+arguments = sys.argv
+
+
+try :  
+    root = arguments[1]
+except:
+    raise Exception("You must provide the input path") 
+
 import pandas as pd
 import numpy as np
 import pathlib
@@ -18,21 +27,20 @@ from sksurv.ensemble import RandomSurvivalForest
  
 from preprocessing import readcounts_processing_pipeline, pheno_processing_pipeline, prepare_train_test, remove_unique_columns
 from HosmerLemeshow import HosmerLemeshow, reformat_inputs
+from dotenv import load_dotenv
 
-arguments = sys.argv
-  
-root = arguments[1]
+os.environ["root_folder"] = root
 
-pheno_df_train = pd.read_csv(root + 'train/pheno_training.csv')
+pheno_df_train = pd.read_csv(root + '/train/pheno_training.csv')
 pheno_df_train = pheno_processing_pipeline(pheno_df_train)
 
-pheno_df_test = pd.read_csv(root + 'test/pheno_test.csv')
+pheno_df_test = pd.read_csv(root + '/test/pheno_test.csv')
 pheno_df_test = pheno_processing_pipeline(pheno_df_test)
 
-readcounts_df_train = pd.read_csv(root + 'train/readcounts_training.csv')
+readcounts_df_train = pd.read_csv(root + '/train/readcounts_training.csv')
 readcounts_df_train = readcounts_processing_pipeline(readcounts_df_train)
 
-readcounts_df_test = pd.read_csv(root + 'test/readcounts_test.csv')
+readcounts_df_test = pd.read_csv(root + '/test/readcounts_test.csv')
 readcounts_df_test = readcounts_processing_pipeline(readcounts_df_test)
  
  
