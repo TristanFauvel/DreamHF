@@ -6,13 +6,41 @@ Author : Tristan Fauvel
 ### Challenge description
 
 See <https://www.synapse.org/#!Synapse:syn27130803/wiki/616705>
+
+
+### Instruction to build the singularity container from the recipe.txt
+
+To create an executable singularity container (which contains the code), run :
+
+```bash
+./build_container.sh
+```
+
+This will create a container container.sif in /singularity.
+To test the executable singularity container, run :
+
+```bash
+./test_container.sh
+```
+
+This will output the results in singularity/test_singularity/output.
+
 ### Instructions to run the model
 
+The singularity container container.sif is executable, you can reproduce the results by running:
 
-I have made the singularity executable: just run 
+```bash
 singularity run ./singularity/container.sif <Argument for input path>
+```
 
-To run the model locally on synthetic data, activate the singularity container in Terminal using:
+Note: `<Argument for input path> ` is optional, default is ./
+
+
+Note that container.sif should be in the same folder as /training and /test.
+The prediction scores on test dataset are saved in `./output/scores.csv`.
+### Instructions to run a custom model in the same environment
+
+To run a model locally on synthetic data in the container environement, activate the singularity container in Terminal using:
 
 ```bash
 singularity shell ./singularity/container.sif
@@ -36,10 +64,9 @@ This command can also be used to run the singularity without accessing the singu
 ```bash
 singularity exec container.sif python3 src/model.py <Argument for input path>
 ```
+### Baseline models
 
-The prediction scores on test dataset are saved in `./output/scores.csv`.
-
-The `baselineModels_example.R` provided in the challenge can be launched using the singularity container provided by the organizing team (singularity.sif) :  
+The `baselineModels_example.R` provided by the challenge organizers can be launched using the singularity container provided by the organizing team (singularity.sif) :  
 
 ```bash
 singularity exec ./singularity/TristanF_Submission_1.sif Rscript src/baselineModels.R
@@ -52,20 +79,6 @@ Singularity> Rscript src/baselineModels.R
 ```
 
 In that case, the predictions generated are saved to `/output/scores.csv`.
-
-### Instruction to build the singularity container from the recipe.txt
-To create the executable singularity container (which contains the code), run :
-
-```bash
-./build_container.sh
-```
-
-
-To test the executable singularity container (which contains the code), run :
-
-```bash
-./test_container.sh
-```
 
 ### Content
 
