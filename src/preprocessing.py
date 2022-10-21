@@ -45,20 +45,14 @@ def prepare_train_test(df_train, df_test, covariates):
     # Left truncation : we remove all participants who experienced HF before entering the study.
     
     selection_train = (df_train.loc[:,'Event_time']>=0)
-    selection_test = (df_test.loc[:,'Event_time']>=0)
+    selection_test = (df_test.loc[:,'Event_time']>=-np.inf)
     X_train = df_train.loc[selection_train, covariates]
     X_test = df_test.loc[selection_test,covariates]    
-    y_train = df_train.loc[df_train.loc[:,'Event_time']>=0,['Event', 'Event_time']]
-    y_test = df_test.loc[df_test.loc[:,'Event_time']>=0,['Event', 'Event_time']]
+    y_train = df_train.loc[selection_train,['Event', 'Event_time']]
+    y_test = df_test.loc[selection_test,['Event', 'Event_time']]
     
     test_sample_ids = df_test.loc[selection_test, :].index  
     
-    """
-    X_train = df_train.loc[:, covariates]
-    X_test = df_test.loc[:,covariates]    
-    y_train = df_train.loc[:,['Event', 'Event_time']]
-    y_test = df_test.loc[:,['Event', 'Event_time']]
-    """
     y_train =y_train.to_records(index = False)
     y_test =y_test.to_records(index = False)
     

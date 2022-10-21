@@ -2,18 +2,19 @@
 # %%
 import sys
 import os
+import pathlib
 arguments = sys.argv
 
 
-try :  
+try:
     root = arguments[1]
 except:
-    raise Exception("You must provide the input path") 
+    raise Exception("You must provide the input path")
 
 import pandas as pd
 import numpy as np
 import pathlib
-import sklearn 
+import sklearn
 from sksurv.functions import StepFunction
 from sksurv.linear_model import CoxPHSurvivalAnalysis
 from sksurv.metrics import (
@@ -24,38 +25,48 @@ from sksurv.metrics import (
 )
 from sksurv.column import encode_categorical
 from sksurv.ensemble import RandomSurvivalForest
- 
-from preprocessing import readcounts_processing_pipeline, pheno_processing_pipeline, prepare_train_test, remove_unique_columns
+
+from preprocessing import (
+    readcounts_processing_pipeline,
+    pheno_processing_pipeline,
+    prepare_train_test,
+    remove_unique_columns,
+)
 from HosmerLemeshow import HosmerLemeshow, reformat_inputs
 from dotenv import load_dotenv
+from postprocessing import postprocessing
 
 os.environ["root_folder"] = root
 
-pheno_df_train = pd.read_csv(root + '/train/pheno_training.csv')
+pheno_df_train = pd.read_csv(root + "/train/pheno_training.csv")
 pheno_df_train = pheno_processing_pipeline(pheno_df_train)
 
-pheno_df_test = pd.read_csv(root + '/test/pheno_test.csv')
+pheno_df_test = pd.read_csv(root + "/test/pheno_test.csv")
 pheno_df_test = pheno_processing_pipeline(pheno_df_test)
 
-readcounts_df_train = pd.read_csv(root + '/train/readcounts_training.csv')
+readcounts_df_train = pd.read_csv(root + "/train/readcounts_training.csv")
 readcounts_df_train = readcounts_processing_pipeline(readcounts_df_train)
 
-readcounts_df_test = pd.read_csv(root + '/test/readcounts_test.csv')
+readcounts_df_test = pd.read_csv(root + "/test/readcounts_test.csv")
 readcounts_df_test = readcounts_processing_pipeline(readcounts_df_test)
- 
- 
+
+
 pheno_df = pd.concat([pheno_df_train, pheno_df_test])
 pheno_df = pheno_df.loc[pheno_df.Event_time > 0]
-t0 = pheno_df['Event_time'].min()
-tf = pheno_df['Event_time'].max()
+t0 = pheno_df["Event_time"].min()
+tf = pheno_df["Event_time"].max()
 
 times = np.linspace(t0, tf, 15)
-times = times[1:-1] 
+times = times[1:-1]
 
 
-base_model = CoxPHSurvivalAnalysis(alpha=0, ties='breslow', n_iter=100, tol=1e-09, verbose=0)
-covariates = ['Sex=1', 'Age']
-X_train, X_test, y_train, y_test, test_sample_ids = prepare_train_test(pheno_df_train, pheno_df_test, covariates)
+base_model = CoxPHSurvivalAnalysis(
+    alpha=0, ties="breslow", n_iter=100, tol=1e-09, verbose=0
+)
+covariates = ["Sex=1", "Age"]
+X_train, X_test, y_train, y_test, test_sample_ids = prepare_train_test(
+    pheno_df_train, pheno_df_test, covariates
+)
 
 """
 # Random forest survival model with all clinical covariates + microbiome data
@@ -74,20 +85,8 @@ X_train, X_test, y_train, y_test,test_sample_ids = prepare_train_test(df_train, 
 base_model.fit(X_train, y_train)
 
 preds_test = base_model.predict(X_test)
- 
-results = pd.DataFrame({'Score':preds_test}, index = test_sample_ids)
-results.index.name = 'SampleID'
- 
-#Team_Name_Submission_Number = 'TristanF_Submission_1'
 
-import pathlib
 
-# outdir = root + '/' + Team_Name_Submission_Number + '/output/'
-outdir = root + '/output/'
-
-p = pathlib.Path(outdir)
-p.mkdir(parents=True, exist_ok=True)
-
-results.to_csv(outdir + 'score.csv')
+postprocessing(preds_test, test_sample_ids)
 
 # %%

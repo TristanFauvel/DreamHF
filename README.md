@@ -13,14 +13,14 @@ See <https://www.synapse.org/#!Synapse:syn27130803/wiki/616705>
 To create an executable singularity container (which contains the code), run :
 
 ```bash
-./build_container.sh
+./utils/build_container.sh
 ```
 
 This will create a container container.sif in /singularity.
 To test the executable singularity container, run :
 
 ```bash
-./test_container.sh
+./utils/test_container.sh
 ```
 
 This will output the results in singularity/test_singularity/output.
