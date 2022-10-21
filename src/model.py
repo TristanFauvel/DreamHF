@@ -1,8 +1,9 @@
 # This is the model submitted for evaluation in the challenge
 # %%
 import sys
-
+import os
 arguments = sys.argv
+
 
 try :  
     root = arguments[1]
