@@ -66,4 +66,21 @@ def remove_unique_columns(readcounts_df_train, readcounts_df_test):
             readcounts_df_train.drop(col,inplace=True,axis=1)
     return readcounts_df_train, readcounts_df_test
 
- 
+
+
+def check_data(df, training, imputation):
+    # Check that the input data do not contain NaN
+    nan_cols= df.isnull().values.any(axis = 0)
+    nan_counts = df.isnull().values.sum(axis = 0)
+    for nan, column, nan_c in zip(nan_cols, df.columns, nan_counts):
+        if nan:
+            print(f"Column {column} has {nan_c} missing values")
+    
+    n_deleted = df.shape[0] -  df.dropna().shape[0]
+    if n_deleted >0 and imputation == 'delete':
+        df.dropna(inplace=True)
+        print(f"Deleted {n_deleted} rows with missing values")
+    else:
+        print(f"Number of rows with missing values: {n_deleted}")
+        #print('Please provide an imputation method')
+    return df

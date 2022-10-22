@@ -8,3 +8,4 @@ config.py
 *.zip
 *.mp4
 References/
+.env
