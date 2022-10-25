@@ -40,7 +40,7 @@ for index, row in candidate_models_df.iterrows():
     monitor = row["est_monitor"]
 
     model = create_pipeline(model) 
-    scores = cross_val_score(model, X_train, y_train, cv=5)
+    scores = cross_val_score(model, X_train, y_train, cv=5, error_score='raise')
     score = np.mean(scores)
     if score > best_score:
         best_score = score
