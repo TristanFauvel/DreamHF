@@ -9,3 +9,5 @@ config.py
 *.mp4
 References/
 .env
+*.pyc
+*.html

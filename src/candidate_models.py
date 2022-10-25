@@ -35,15 +35,11 @@ est_early_stopping = GradientBoostingSurvivalAnalysis(
     max_depth=1, random_state=0
 )
 
-est_aft_ls = ComponentwiseGradientBoostingSurvivalAnalysis(
-    loss="ipcwls", n_estimators=300, learning_rate=1.0, random_state=0
-) 
 
- 
 est_cph_tree = GradientBoostingSurvivalAnalysis(
     n_estimators=100, learning_rate=1.0, max_depth=1, random_state=0
 )
 
 monitor = EarlyStoppingMonitor(25, 50)
 
-candidate_models_df = pd.DataFrame({'model_name' : [est_early_stopping, est_aft_ls, est_cph_tree], 'est_monitor' : [monitor, None, None]}) 
+candidate_models_df = pd.DataFrame({'model_name' : [est_early_stopping,  est_cph_tree], 'est_monitor' : [monitor, None]}) 
