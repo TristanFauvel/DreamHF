@@ -11,6 +11,12 @@ except:
     raise Exception("You must provide the input path")
 
 
+
+#%%
+Warning("Remove the line below!")
+root = '/home/tristan/Desktop/Repos/DreamHF'
+#####################
+
 import numpy as np
 from preprocessing import load_data, prepare_train_test
 
@@ -22,8 +28,7 @@ from candidate_models import candidate_models_df
 # Load the data
 os.environ["root_folder"] = root
 pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test = load_data(root)
-
-
+ 
  
 df_train = pheno_df_train.join(readcounts_df_train)
 df_test = pheno_df_test.join(readcounts_df_test)
@@ -40,7 +45,7 @@ for index, row in candidate_models_df.iterrows():
     monitor = row["est_monitor"]
 
     model = create_pipeline(model) 
-    scores = cross_val_score(model, X_train, y_train, cv=5, error_score='raise')
+    scores = cross_val_score(model, X_train, y_train, cv=5)
     score = np.mean(scores)
     if score > best_score:
         best_score = score
@@ -52,5 +57,13 @@ best_model.fit(X_train, y_train, model__monitor=best_monitor)
 # Return predictions
 preds_test = best_model.predict(X_test)
 postprocessing(preds_test, test_sample_ids)
+
+# %%
+row = candidate_models_df.iloc[1,:]
+model = row["model_name"]
+monitor = row["est_monitor"]
+
+model = create_pipeline(model) 
+scores = cross_val_score(model, X_train, y_train, cv=5, error_score='raise')
 
 # %%

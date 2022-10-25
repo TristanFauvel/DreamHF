@@ -4,8 +4,9 @@ from sksurv.nonparametric import kaplan_meier_estimator
 import pandas as pd
 from scipy.stats import chi2
 
+
 class ExtentedStepFunction:
-    """Callable step function. 
+    """Callable step function.
     Compared to the standard step function, the extended step function allows to compute
     the value of the function at points beyond the range of x used in the function definition.
 
@@ -28,7 +29,8 @@ class ExtentedStepFunction:
     b : float, optional, default: 0.0
         Constant offset term.
     """
-    def __init__(self, x, y, a=1., b=0.):
+
+    def __init__(self, x, y, a=1.0, b=0.0):
         check_consistent_length(x, y)
         self.x = x
         self.y = y
@@ -51,11 +53,11 @@ class ExtentedStepFunction:
         x = np.atleast_1d(x)
         if not np.isfinite(x).all():
             raise ValueError("x must be finite")
-        
-        i = np.searchsorted(self.x, x, side='left')
-        
-        n = np.sum(i>=self.x.shape[0])
-        self.x = np.concatenate([self.x, self.x[-1]*np.ones(n)])
+
+        i = np.searchsorted(self.x, x, side="left")
+
+        n = np.sum(i >= self.x.shape[0])
+        self.x = np.concatenate([self.x, self.x[-1] * np.ones(n)])
         not_exact = self.x[i] != x
         i[not_exact] -= 1
         value = self.a * self.y[i] + self.b
@@ -65,56 +67,54 @@ class ExtentedStepFunction:
 
     def __repr__(self):
         return "StepFunction(x=%r, y=%r, a=%r, b=%r)" % (self.x, self.y, self.a, self.b)
-    
- 
-def HosmerLemeshowSurvival(model,X_test, y_test, df = 2, Q = 10):
-    
+
+
+def HosmerLemeshowSurvival(times, model, X_test, y_test, df=2, Q=10):
+
     """
     df = 2 # Cook-Ridler test
     df = 1 # D'Agostino-Nam test
-    
     """
     
-    times, KM_survival_prob = kaplan_meier_estimator(y_train["Event"], y_train["Event_time"])
-
+    if isinstance(times, int):
+        times = np.array([times])
+    
     nt = times.shape[0]
 
     predictions = model.predict_survival_function(X_test)
-    pred_surv_prob = np.row_stack([
-        fn(times)
-        for fn in predictions
-    ])
+    pred_surv_prob = np.row_stack([fn(times) for fn in predictions])
 
-
-    id_surv_prob_sorted = np.argsort(pred_surv_prob[:,-2])
-    pred_surv_prob  = pred_surv_prob[id_surv_prob_sorted,:]
-    
-
+    id_surv_prob_sorted = np.argsort(pred_surv_prob[:, -1])
+    pred_surv_prob = pred_surv_prob[id_surv_prob_sorted, :]
 
     categories, bins = pd.cut(
-        pred_surv_prob[:,-2],
-        np.percentile(pred_surv_prob[:,-2], np.linspace(0, 100, Q + 1)),
+        pred_surv_prob[:, -1],
+        np.percentile(pred_surv_prob[:, -1], np.linspace(0, 100, Q + 1)),
         labels=False,
         include_lowest=True,
         retbins=True,
     )
 
-        
     expevents = np.zeros((Q, nt))
     obsevents = np.zeros((Q, nt))
     pi = np.zeros((Q, nt))
 
-    for i in range(Q):    
-        KM_times, KM_survival_prob = kaplan_meier_estimator(y_test[categories == i].Event, y_test[categories == i].Event_time)
+    for i in range(Q):
+        KM_times, KM_survival_prob = kaplan_meier_estimator(
+            y_test[categories == i].Event, y_test[categories == i].Event_time
+        )
         KM_est = ExtentedStepFunction(KM_times, KM_survival_prob)
         KM_i_t = KM_est(times)
         ni = np.sum(categories == i)
-        obsevents[i,:] = ni * (1-KM_i_t)
-        expevents[i,:] = pred_surv_prob[categories == i,:].sum(axis = 0)
-        pi[i,:] = pred_surv_prob[categories == i,:].sum(axis = 0)/ni
-        
-        
-    chisq_value = np.sum((obsevents - expevents)**2/(expevents*(1-pi)), axis = 0)
+        obsevents[i, :] = ni * (1 - KM_i_t)
+        expevents[i, :] = (1 - pred_surv_prob[categories == i, :]).sum(axis=0)
+        pi[i, :] = expevents[i, :] / ni
+
+    chisq_value = np.sum((obsevents - expevents) ** 2 / (expevents * (1 - pi)), axis=0)
     pvalue = 1 - chi2.cdf(chisq_value, Q - df)
+
+    if nt == 1:
+        chisq_value = chisq_value[0]
+        pvalue = pvalue[0]   
     
-    return chisq_value, pvalue
+    return {'chisq_value': chisq_value, 'pvalue':pvalue}
