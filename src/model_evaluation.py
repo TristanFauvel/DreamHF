@@ -1,11 +1,6 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pathlib
-import sklearn 
-from sksurv.functions import StepFunction
-from sksurv.linear_model import CoxPHSurvivalAnalysis
+
 from sksurv.metrics import (
     concordance_index_censored,
     concordance_index_ipcw,
@@ -41,13 +36,19 @@ def evaluate_model(base_model, X_train, X_test, y_train, y_test):
     concordance_index_ipcw_test = concordance_index_ipcw(y_train, y_test, preds_test, tau = tau)
 
     #%% Integrated Brier score
-    survs = base_model.predict_survival_function(X_train)
-    preds = np.asarray([[fn(t) for t in times] for fn in survs]) 
-    integrated_brier_score_train = integrated_brier_score(y_train, y_train, preds, times)
-
-    survs = base_model.predict_survival_function(X_test)
-    preds = np.asarray([[fn(t) for t in times] for fn in survs]) 
-    integrated_brier_score_test = integrated_brier_score(y_train, y_test, preds, times)
+    try : 
+        survs = base_model.predict_survival_function(X_train)
+        preds = np.asarray([[fn(t) for t in times] for fn in survs]) 
+        integrated_brier_score_train = integrated_brier_score(y_train, y_train, preds, times)
+    except :
+        integrated_brier_score_train = np.nan
+    
+    try:
+        survs = base_model.predict_survival_function(X_test)
+        preds = np.asarray([[fn(t) for t in times] for fn in survs]) 
+        integrated_brier_score_test = integrated_brier_score(y_train, y_test, preds, times)
+    except:
+        integrated_brier_score_test = np.nan
  
     #result = {'Harrell_C_train':  concordance_index_censored_train[0], 'Harrell_C_test' : concordance_index_censored_test[0]}
     

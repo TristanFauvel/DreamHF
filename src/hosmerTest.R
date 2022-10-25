@@ -4,7 +4,7 @@
 
 # Coxar and Hoslem.test are the functions of interest
 # the rest are helper functions 
-
+library(reticulate)
 tiles <- c('','','tertiles','quartiles','quintiles','sextiles','septiles','octiles','noniles','deciles')
 
 grpkm <- function(grps,surv,weights=NULL) {
@@ -31,6 +31,7 @@ HosLem.test <- function(surv,pred,plot=TRUE,DF.reduce=2) {
   # About the differences: http://hdl.handle.net/1773/22648
   # (Guffey D., Hosmer-Lemeshow goodness-of-fit test: Translations to the Cox Proportional Hazards Model)
   # if plot is a name, a jpg plot is saved with this name (.jpg will be added)
+   
   if(!DF.reduce%in%c(1,2)) stop('Please specify DF.reduce = 1 or 2')
   if(!is.Surv(surv)) stop('Please use a survival object')
   version <- c('D\'Agostino-Nam','Cook-Ridker')[DF.reduce]
