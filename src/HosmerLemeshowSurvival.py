@@ -87,14 +87,14 @@ def HosmerLemeshowSurvival(times, model, X_test, y_test, df=2, Q=10):
     id_surv_prob_sorted = np.argsort(pred_surv_prob[:, -1])
     pred_surv_prob = pred_surv_prob[id_surv_prob_sorted, :]
 
-    categories, bins = pd.cut(
+    categories = pd.cut(
         pred_surv_prob[:, -1],
         np.percentile(pred_surv_prob[:, -1], np.linspace(0, 100, Q + 1)),
         labels=False,
-        include_lowest=True,
-        retbins=True,
+        include_lowest=True, 
+        duplicates = 'drop'
     )
-
+    Q = categories.max() # In case where there are duplicate edges, recompute the effective number of groups
     expevents = np.zeros((Q, nt))
     obsevents = np.zeros((Q, nt))
     pi = np.zeros((Q, nt))

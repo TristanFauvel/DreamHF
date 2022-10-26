@@ -28,7 +28,7 @@ pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test = load_da
  
 df_train = pheno_df_train.join(readcounts_df_train)
 df_test = pheno_df_test.join(readcounts_df_test)
-covariates = df_train.columns
+covariates = df_train.loc[:, (df_train.columns != 'Event') & (df_train.columns != 'Event_time')].columns
 
 X_train, X_test, y_train, y_test,test_sample_ids = prepare_train_test(df_train, df_test, covariates)
 

@@ -80,11 +80,15 @@ def prepare_train_test(df_train, df_test, covariates):
     
     test_sample_ids = df_test.index
 
+    #Make sure that the features do not contain Event or Event_time
+    if "Event" in covariates or "Event_time" in covariates:
+        Exception("Event or Event_time are included in covariates, please remove them.")
+      
     X_train = df_train.loc[selection_train, covariates]
     X_test = df_test.loc[:, covariates]
     y_train = df_train.loc[selection_train, ["Event", "Event_time"]]
     y_train = y_train.to_records(index=False)
-
+     
     if "Event" in df_test:
         y_test = df_test.loc[:, ["Event", "Event_time"]]
         y_test = y_test.to_records(index=False)
