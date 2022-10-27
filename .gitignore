@@ -11,3 +11,4 @@ References/
 .env
 *.pyc
 *.html
+wandb/
