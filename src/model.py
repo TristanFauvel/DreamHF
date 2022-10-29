@@ -1,4 +1,11 @@
 # This is the model submitted for evaluation in the challenge
+from preprocessing import load_data, Salosensaari_processing
+from pipeline import postprocessing, create_pipeline
+from candidate_models import EarlyStoppingMonitor
+from sksurv.ensemble import GradientBoostingSurvivalAnalysis
+from sklearn.model_selection import RandomizedSearchCV
+from scipy.stats import uniform, randint
+
 # %%
 import sys
 import os
@@ -8,30 +15,22 @@ arguments = sys.argv
 try:
     root = arguments[1]
 except:
-    raise Exception("You must provide the input path")
+    raise ValueError("You must provide the input path")
 
-import numpy as np
-from preprocessing import load_data, prepare_train_test
+#%%
 
-from pipeline import postprocessing, create_pipeline
-from sklearn.model_selection import cross_val_score 
-from candidate_models import candidate_models_df
-from model_evaluation import evaluate_model
 
 # Load the data
 os.environ["root_folder"] = root
 
-
+#%%
 print("Processing the data...")
 pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test = load_data(root)
- 
- 
-df_train = pheno_df_train.join(readcounts_df_train)
-df_test = pheno_df_test.join(readcounts_df_test)
-covariates = df_train.loc[:, (df_train.columns != 'Event') & (df_train.columns != 'Event_time')].columns
 
-X_train, X_test, y_train, y_test,test_sample_ids = prepare_train_test(df_train, df_test, covariates)
-
+X_train, X_test, y_train, y_test, test_sample_ids = Salosensaari_processing(
+    pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test
+)
+"""
 # Loop over the candidate models and optimize them individually
 print("Crossvalidation of candidate models...")
 best_score = 0
@@ -46,6 +45,35 @@ for index, row in candidate_models_df.iterrows():
         best_score = score
         best_model = model
         best_monitor = monitor
+"""
+
+monitor = EarlyStoppingMonitor(25, 50)
+est_early_stopping = GradientBoostingSurvivalAnalysis()
+pipe = create_pipeline(est_early_stopping)
+pipe.fit = lambda X_train, y_train: pipe.fit(X_train, y_train, model__monitor=monitor)
+
+distributions = dict(
+    model__learning_rate=uniform(loc=0, scale=1),
+    model__max_depth=randint(1, 4),
+    model__loss=["coxph"],
+    model__n_estimators=uniform(loc=30, scale=150),
+    model__min_samples_split=randint(2, 10),
+    model__min_samples_leaf=randint(1, 10),
+    model__subsample=uniform(loc=0.5, scale=0.5),
+    model__max_leaf_nodes=randint(2, 10),
+    model__dropout_rate=uniform(loc=0, scale=1),
+)
+
+
+randsearchcv = RandomizedSearchCV(
+    pipe, distributions, random_state=0, n_iter=300, n_jobs=-1
+)
+search = randsearchcv.fit(X_train, y_train)
+best_model = search.best_estimator_
+best_monitor = monitor
+
+
+#%%
 
 print("Prediction with the best model...")
 best_model.fit(X_train, y_train, model__monitor=best_monitor)

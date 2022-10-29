@@ -1,9 +1,11 @@
-from sksurv.ensemble import GradientBoostingSurvivalAnalysis, ComponentwiseGradientBoostingSurvivalAnalysis
+from sksurv.ensemble import GradientBoostingSurvivalAnalysis
 import pandas as pd
 import numpy as np
 
-class EarlyStoppingMonitor:
+est_early_stopping = GradientBoostingSurvivalAnalysis()
 
+
+class EarlyStoppingMonitor:
     def __init__(self, window_size, max_iter_without_improvement):
         self.window_size = window_size
         self.max_iter_without_improvement = max_iter_without_improvement
@@ -30,9 +32,9 @@ class EarlyStoppingMonitor:
         diff = iteration - self._best_step
         return diff >= self.max_iter_without_improvement
 
+
 est_early_stopping = GradientBoostingSurvivalAnalysis(
-    n_estimators=1000, learning_rate=0.05, subsample=0.5,
-    max_depth=1, random_state=0
+    n_estimators=1000, learning_rate=0.05, subsample=0.5, max_depth=1, random_state=0
 )
 
 
@@ -42,4 +44,6 @@ est_cph_tree = GradientBoostingSurvivalAnalysis(
 
 monitor = EarlyStoppingMonitor(25, 50)
 
-candidate_models_df = pd.DataFrame({'model_name' : [est_early_stopping,  est_cph_tree], 'est_monitor' : [monitor, None]}) 
+candidate_models_df = pd.DataFrame(
+    {"model_name": [est_early_stopping, est_cph_tree], "est_monitor": [monitor, None]}
+)

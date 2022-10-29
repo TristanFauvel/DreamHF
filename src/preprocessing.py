@@ -2,6 +2,8 @@
 import pandas as pd
 import numpy as np
 from sksurv.column import encode_categorical
+from skbio.stats.composition import multiplicative_replacement
+from skbio.stats.composition import clr
 
 
 def pheno_processing_pipeline(df, training):
@@ -15,11 +17,6 @@ def pheno_processing_pipeline(df, training):
         df.dropna(subset=["Event_time"], inplace=True)
         df = df.astype({"Event_time": "float64"})
 
-    """   
-    df = df.astype({'Age':'float64', 'Smoking':'bool', 'PrevalentCHD':'bool', 'BPTreatment':'bool', 'PrevalentDiabetes':'bool', 'PrevalentHFAIL':'bool',
-                                       'Event':'bool', 'Sex':'bool', 'BodyMassIndex':'float64', 'SystolicBP':'float64', 'NonHDLcholesterol':'float64'})      
-     
-    """
     df.set_index("Unnamed: 0", inplace=True)
 
     df = df.rename_axis(index=None, columns=df.index.name)
@@ -28,11 +25,6 @@ def pheno_processing_pipeline(df, training):
         artifacts = (df["Event_time"] < 0) & (df["Event"] == 1)
         df = df.loc[~artifacts, :]
 
-    #############################################
-
-    # selection = ((df.loc[:,'Event_time']>=0) & (((df.loc[:,'Event_time']<14.5) &  (df.loc[:,'Event']==1)) | (df.loc[:,'Event']==0)))
-    # df = df.loc[selection,:]
-    #############################################
     return df
 
 
@@ -69,26 +61,37 @@ def load_data(root):
         readcounts_df_train, readcounts_df_test
     )
 
+    idx_pheno_train = pheno_df_train.index
+    idx_pheno_test = pheno_df_test.index
+    idx_read_train = readcounts_df_train.index
+    idx_read_test = readcounts_df_test.index
+
+    idx_train = idx_pheno_train.intersection(idx_read_train)
+    idx_test = idx_pheno_test.intersection(idx_read_test)
+
+    readcounts_df_train = readcounts_df_train.loc[idx_train, :]
+    readcounts_df_test = readcounts_df_test.loc[idx_test, :]
+    pheno_df_test = pheno_df_test.loc[idx_test, :]
+    pheno_df_train = pheno_df_train.loc[idx_train, :]
+
     return pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test
 
 
 def prepare_train_test(df_train, df_test, covariates):
-
     # Left truncation : we remove all participants who experienced HF before entering the study.
+    selection_train = df_train.loc[:, "Event_time"] >= -np.inf  # 0
 
-    selection_train = df_train.loc[:, "Event_time"] >= -np.inf #0
-    
     test_sample_ids = df_test.index
 
-    #Make sure that the features do not contain Event or Event_time
+    # Make sure that the features do not contain Event or Event_time
     if "Event" in covariates or "Event_time" in covariates:
         Exception("Event or Event_time are included in covariates, please remove them.")
-      
+
     X_train = df_train.loc[selection_train, covariates]
     X_test = df_test.loc[:, covariates]
     y_train = df_train.loc[selection_train, ["Event", "Event_time"]]
     y_train = y_train.to_records(index=False)
-     
+
     if "Event" in df_test:
         y_test = df_test.loc[:, ["Event", "Event_time"]]
         y_test = y_test.to_records(index=False)
@@ -114,3 +117,74 @@ def check_data(df):
         print(f"Number of rows with missing values: {n_deleted}")
         print("Please provide an imputation method")
     return df
+
+
+def taxa_aggregation(readcounts_df, taxonomic_level="s__"):
+    # Aggregate the species into genus
+    readcounts_df.columns = [
+        el.split(taxonomic_level)[0] for el in readcounts_df.columns
+    ]
+    readcounts_df = readcounts_df.groupby(readcounts_df.columns, axis=1).sum()
+    return readcounts_df
+
+
+def taxa_filtering(readcounts_df):
+    ## Select genus-level taxonomic groups that were detected in >1% of the study participants at a within-sample relative abundance of >0.1%.
+    total = readcounts_df.sum(axis=1)
+    df_proportions = readcounts_df.divide(total, axis="rows")
+    selection = (df_proportions > 0.001).mean(axis=0) > 0.01
+    readcounts_df = readcounts_df.loc[:, selection]
+
+    # Median relative abundance of the selected genus
+    relative_abundance = df_proportions.loc[:, selection].sum(axis=1)
+    relative_abundance.median()
+
+    return selection
+
+
+def centered_log_transform(readcounts_df):
+    ## Centered log transformation
+    X_mr = multiplicative_replacement(readcounts_df)
+
+    # CLR
+    X_clr = clr(X_mr)
+
+    df = pd.DataFrame(X_clr, columns=readcounts_df.columns, index=readcounts_df.index)
+    return df
+
+
+def Salosensaari_processing(
+    pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test
+):
+    readcounts_df_train = taxa_aggregation(readcounts_df_train)
+    selection = taxa_filtering(readcounts_df_train)
+    readcounts_df_train = readcounts_df_train.loc[:, selection]
+    df_clr_train = centered_log_transform(readcounts_df_train)
+
+    readcounts_df_test = taxa_aggregation(readcounts_df_test)
+    readcounts_df_test = readcounts_df_test.loc[:, selection]
+    df_clr_test = centered_log_transform(readcounts_df_test)
+
+    df_train = pheno_df_train.join(df_clr_train)
+    df_test = pheno_df_test.join(df_clr_test)
+    selection = (df_train.columns != "Event") & (df_train.columns != "Event_time")
+    covariates = df_train.columns[selection]
+
+    X_train, X_test, y_train, y_test, test_sample_ids = prepare_train_test(
+        df_train, df_test, covariates
+    )
+    return X_train, X_test, y_train, y_test, test_sample_ids
+
+
+def standard_processing(
+    pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test
+):
+    df_train = pheno_df_train.join(readcounts_df_train)
+    df_test = pheno_df_test.join(readcounts_df_test)
+    covariates = df_train.loc[
+        :, (df_train.columns != "Event") & (df_train.columns != "Event_time")
+    ].columns
+    X_train, X_test, y_train, y_test, test_sample_ids = prepare_train_test(
+        df_train, df_test, covariates
+    )
+    return X_train, X_test, y_train, y_test, test_sample_ids

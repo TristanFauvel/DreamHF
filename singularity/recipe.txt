@@ -20,7 +20,7 @@ FROM: python:3.8.13
 	pip install python-dotenv==0.21.0
 	pip install scikit_survival==0.17.2
 	pip install synapseclient==2.7.0
-
+	pip install scikit_bio==0.5.7
 
 %runscript
 	if [ $# -ne 1 ]; then
