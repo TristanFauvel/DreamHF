@@ -4,6 +4,7 @@ import numpy as np
 from sksurv.column import encode_categorical
 from skbio.stats.composition import multiplicative_replacement
 from skbio.stats.composition import clr
+import xgboost as xgb
 
 
 def pheno_processing_pipeline(df, training):
@@ -188,3 +189,19 @@ def standard_processing(
         df_train, df_test, covariates
     )
     return X_train, X_test, y_train, y_test, test_sample_ids
+
+
+def XGboost_formatting(X, y):
+    event = y.Event
+    time = y.Event_time
+
+    data = xgb.DMatrix(X.to_numpy(), enable_categorical=True)
+
+    # Associate ranged labels with the data matrix.
+    y_lower_bound = np.array(time)
+    y_upper_bound = np.array(time)
+    y_upper_bound[event == 0] = np.inf
+    data.set_float_info("label_lower_bound", y_lower_bound)
+    data.set_float_info("label_upper_bound", y_upper_bound)
+
+    return data

@@ -4,7 +4,7 @@ from pipeline import postprocessing, create_pipeline
 from candidate_models import EarlyStoppingMonitor
 from sksurv.ensemble import GradientBoostingSurvivalAnalysis
 from sklearn.model_selection import RandomizedSearchCV
-from scipy.stats import uniform, randint
+
 
 # %%
 import sys
@@ -27,6 +27,18 @@ os.environ["root_folder"] = root
 print("Processing the data...")
 pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test = load_data(
     root)
+
+clinical_covariates = [
+    "Age",
+    "BodyMassIndex",
+    "Smoking",
+    "BPTreatment",
+    "SystolicBP",
+    "NonHDLcholesterol",
+]
+
+pheno_df_train = pheno_df_train.loc[clinical_covariates, :]
+pheno_df_test = pheno_df_test.loc[clinical_covariates, :]
 
 X_train, X_test, y_train, y_test, test_sample_ids = Salosensaari_processing(
     pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test
