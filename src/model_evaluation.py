@@ -29,14 +29,16 @@ def evaluate_model(model, X_train, X_test, y_train, y_test):
         -1
     ]  #  Truncation time. The survival function for the underlying censoring time distribution needs to be positive at tau
 
+    event_field, time_field = y_train.dtype.names
+
     #%% Harrel's concordance index
     # Harrel's concordance index C is defined as the proportion of observations that the model can order correctly in terms of survival times.
     concordance_index_censored_train = concordance_index_censored(
-        y_train["Event"], y_train["Event_time"], preds_train
+        y_train[event_field], y_train[time_field], preds_train
     )
 
     concordance_index_censored_test = concordance_index_censored(
-        y_test["Event"], y_test["Event_time"], preds_test
+        y_test[event_field], y_test[time_field], preds_test
     )
 
     #%% Uno's concordance index (based on inverse probability of censoring weights)
@@ -102,14 +104,16 @@ def evaluate_xgbse_models(model, X_train, X_test, y_train, y_test):
         -1
     ]  #  Truncation time. The survival function for the underlying censoring time distribution needs to be positive at tau
 
+    event_field, time_field = y_train.dtype.names
+
     #%% Harrel's concordance index
     # Harrel's concordance index C is defined as the proportion of observations that the model can order correctly in terms of survival times.
     concordance_index_censored_train = concordance_index_censored(
-        y_train["Event"], y_train["Event_time"], preds_train
+        y_train[event_field], y_train[time_field], preds_train
     )
 
     concordance_index_censored_test = concordance_index_censored(
-        y_test["Event"], y_test["Event_time"], preds_test
+        y_test[event_field], y_test[time_field], preds_test
     )
 
     #%% Uno's concordance index (based on inverse probability of censoring weights)
@@ -148,14 +152,16 @@ def evaluate_xgb_model(model, X_train, X_test, y_train, y_test):
         -1
     ]  #  Truncation time. The survival function for the underlying censoring time distribution needs to be positive at tau
 
+    event_field, time_field = y_train.dtype.names
+
     #%% Harrel's concordance index
     # Harrel's concordance index C is defined as the proportion of observations that the model can order correctly in terms of survival times.
     concordance_index_censored_train = concordance_index_censored(
-        y_train["Event"], y_train["Event_time"], preds_train
+        y_train[event_field], y_train[time_field], preds_train
     )
 
     concordance_index_censored_test = concordance_index_censored(
-        y_test["Event"], y_test["Event_time"], preds_test
+        y_test[event_field], y_test[time_field], preds_test
     )
 
     #%% Uno's concordance index (based on inverse probability of censoring weights)

@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 from xgbse import XGBSEStackedWeibull
-from pipeline import create_pipeline, EarlyStoppingMonitor
+from sklearn.pipeline import create_pipeline, EarlyStoppingMonitor
 from scipy.stats import uniform, randint
 
 monitor = EarlyStoppingMonitor(25, 50)
