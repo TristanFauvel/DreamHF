@@ -1,4 +1,4 @@
-#%%
+# %%
 import synapseclient
 from synapseclient import File
 import os
@@ -23,7 +23,8 @@ outdir = root + "/output/" + submission_name + "/"
 p = pathlib.Path(outdir)
 p.mkdir(parents=True, exist_ok=True)
 shutil.copyfile(root + "/src/model.py", outdir + "model.py")
-shutil.copyfile(root + "/singularity/container.sif", outdir + submission_name + ".sif")
+shutil.copyfile(root + "/singularity/container.sif",
+                outdir + submission_name + ".sif")
 
 
 outdir = root + "/output/" + submission_name + "/output/"
@@ -59,12 +60,13 @@ project_id = os.environ.get("project_id")
 
 syn = synapseclient.login(username, password)
 
-#%%
+
 # Add a local file to an existing project on Synapse
 file = File(path=file_to_upload, parent=project_id)
+
 file = syn.store(
     file
-)  ####################################################################################################""""
+)  # """"
 
 # syn.delete(file) # API documentation : https://help.synapse.org/docs/API-Clients-and-Documentation.1985446128.html
 

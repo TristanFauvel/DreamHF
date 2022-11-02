@@ -17,40 +17,28 @@ try:
 except:
     raise ValueError("You must provide the input path")
 
-#%%
+# %%
 
 
 # Load the data
 os.environ["root_folder"] = root
 
-#%%
+# %%
 print("Processing the data...")
-pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test = load_data(root)
+pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test = load_data(
+    root)
 
 X_train, X_test, y_train, y_test, test_sample_ids = Salosensaari_processing(
     pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test
 )
-"""
-# Loop over the candidate models and optimize them individually
-print("Crossvalidation of candidate models...")
-best_score = 0
-for index, row in candidate_models_df.iterrows():
-    model = row["model_name"]
-    monitor = row["est_monitor"]
 
-    model = create_pipeline(model) 
-    scores = cross_val_score(model, X_train, y_train, cv=5)
-    score = np.mean(scores)
-    if score > best_score:
-        best_score = score
-        best_model = model
-        best_monitor = monitor
-"""
 
+print("Definition of the cross-validation pipeline...")
 monitor = EarlyStoppingMonitor(25, 50)
 est_early_stopping = GradientBoostingSurvivalAnalysis()
 pipe = create_pipeline(est_early_stopping)
-pipe.fit = lambda X_train, y_train: pipe.fit(X_train, y_train, model__monitor=monitor)
+pipe.fit = lambda X_train, y_train: pipe.fit(
+    X_train, y_train, model__monitor=monitor)
 
 distributions = dict(
     model__learning_rate=uniform(loc=0, scale=1),
@@ -64,16 +52,16 @@ distributions = dict(
     model__dropout_rate=uniform(loc=0, scale=1),
 )
 
-
+print("Search for optimal hyperparameters...")
 randsearchcv = RandomizedSearchCV(
-    pipe, distributions, random_state=0, n_iter=300, n_jobs=-1
+    pipe, distributions, random_state=0, n_iter=300, n_jobs=-1, verbose=2
 )
 search = randsearchcv.fit(X_train, y_train)
 best_model = search.best_estimator_
 best_monitor = monitor
 
 
-#%%
+# %%
 
 print("Prediction with the best model...")
 best_model.fit(X_train, y_train, model__monitor=best_monitor)
