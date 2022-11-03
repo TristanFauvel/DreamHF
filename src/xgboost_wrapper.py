@@ -1,6 +1,7 @@
 import xgboost as xgb
 from xgbse.converters import convert_data_to_xgb_format, convert_y
 from sksurv.metrics import concordance_index_censored
+import pandas as pd
 
 
 def harrel_c(y_true, y_pred):
@@ -99,6 +100,10 @@ class XGBSurvival:
         return preds
 
     def score(self, X, y):
+
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+
         risk_score = -self.predict(X)
         event, time = convert_y(y)
         # Harrel's concordance index C is defined as the proportion of observations that the model can order correctly in terms of survival times.
