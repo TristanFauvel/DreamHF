@@ -5,7 +5,7 @@ import pandas as pd
 from scipy.stats import chi2
 
 
-class ExtentedStepFunction:
+class _ExtentedStepFunction:
     """Callable step function.
     Compared to the standard step function, the extended step function allows to compute
     the value of the function at points beyond the range of x used in the function definition.
@@ -103,7 +103,7 @@ def HosmerLemeshowSurvival(times, model, X_test, y_test, df=2, Q=10):
         KM_times, KM_survival_prob = kaplan_meier_estimator(
             y_test[categories == i].Event, y_test[categories == i].Event_time
         )
-        KM_est = ExtentedStepFunction(KM_times, KM_survival_prob)
+        KM_est = _ExtentedStepFunction(KM_times, KM_survival_prob)
         KM_i_t = KM_est(times)
         ni = np.sum(categories == i)
         obsevents[i, :] = ni * (1 - KM_i_t)

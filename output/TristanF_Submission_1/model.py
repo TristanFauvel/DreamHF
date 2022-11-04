@@ -13,7 +13,7 @@ import os
 arguments = sys.argv
 
 try:
-    root = arguments[1]
+    ROOT = arguments[1]
 except:
     raise ValueError("You must provide the input path")
 
@@ -21,12 +21,12 @@ except:
 
 
 # Load the data
-os.environ["root_folder"] = root
+os.environ["ROOT_FOLDER"] = ROOT
 
 # %%
 print("Processing the data...")
 pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test = load_data(
-    root)
+    ROOT)
 
 X_train, X_test, y_train, y_test, test_sample_ids = Salosensaari_processing(
     pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test

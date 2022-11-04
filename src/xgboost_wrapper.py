@@ -24,7 +24,7 @@ DEFAULT_PARAMS = {
     "booster": "dart",
 }
 
-
+ 
 class XGBSurvival:
     def __init__(
         self,
@@ -106,6 +106,7 @@ class XGBSurvival:
 
         risk_score = -self.predict(X)
         event, time = convert_y(y)
-        # Harrel's concordance index C is defined as the proportion of observations that the model can order correctly in terms of survival times.
+        # Harrel's concordance index C is defined as the proportion of observations
+        # that the model can order correctly in terms of survival times.
 
         return concordance_index_censored(event, time, risk_score)[0]

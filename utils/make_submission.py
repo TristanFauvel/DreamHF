@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
-root = os.environ.get("root_folder")
+ROOT = os.environ.get("ROOT_FOLDER")
 
 submission_type = ".sif"
 load_dotenv()
@@ -19,30 +19,30 @@ load_dotenv()
 submission_name = os.environ.get("submission_name")
 
 # Save everything in a submission_name folder in order to keep track of submissions
-outdir = root + "/output/" + submission_name + "/"
+outdir = ROOT + "/output/" + submission_name + "/"
 p = pathlib.Path(outdir)
 p.mkdir(parents=True, exist_ok=True)
-shutil.copyfile(root + "/src/model.py", outdir + "model.py")
-shutil.copyfile(root + "/singularity/container.sif",
+shutil.copyfile(ROOT + "/src/model.py", outdir + "model.py")
+shutil.copyfile(ROOT + "/singularity/container.sif",
                 outdir + submission_name + ".sif")
 
 
-outdir = root + "/output/" + submission_name + "/output/"
+outdir = ROOT + "/output/" + submission_name + "/output/"
 p = pathlib.Path(outdir)
 p.mkdir(parents=True, exist_ok=True)
-shutil.copyfile(root + "/output/score.csv", outdir + "score.csv")
+shutil.copyfile(ROOT + "/output/score.csv", outdir + "score.csv")
 
 if submission_type == ".zip":
     file_to_upload = (
-        root + "/output/" + submission_name + "/" + submission_name + ".zip"
+        ROOT + "/output/" + submission_name + "/" + submission_name + ".zip"
     )
     try:
         os.remove(file_to_upload)
     except OSError:
         pass
 
-    to_zip = root + "/output/" + submission_name + "/"
-    zip_file = root + "/output/" + submission_name
+    to_zip = ROOT + "/output/" + submission_name + "/"
+    zip_file = ROOT + "/output/" + submission_name
     shutil.make_archive(zip_file, "zip", to_zip)
 
     shutil.move(
@@ -50,7 +50,7 @@ if submission_type == ".zip":
     )  # In two steps in order to avoid putting a zip in a zip
 elif submission_type == ".sif":
     file_to_upload = (
-        root + "/output/" + submission_name + "/" + submission_name + ".sif"
+        ROOT + "/output/" + submission_name + "/" + submission_name + ".sif"
     )
 
 username = os.environ.get("username")

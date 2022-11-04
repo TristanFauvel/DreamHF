@@ -11063,7 +11063,7 @@
          |         |                             |         |          \-nan
          |         |                             |         |
          |         |                             |         |-g  SalinispiraSalinispira pacifica
--root----|         |                             |         |
+-ROOT----|         |                             |         |
          |         |                             |         |-g  Sediminispirochaetaspirochaeta smaragdinae
          |         |                             |         |
          |         |                             |         |          /-s  

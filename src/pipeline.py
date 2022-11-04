@@ -56,10 +56,10 @@ def postprocessing(preds_test, test_sample_ids):
         raise ValueError("Predictions contain invalid values (NaN or inf)")
 
     # Save results
-    root = os.environ.get("root_folder")
+    ROOT = os.environ.get("ROOT_FOLDER")
     results = pd.DataFrame({"Score": preds_test}, index=test_sample_ids)
     results.index.name = "SampleID"
-    outdir = root + "/output/"
+    outdir = ROOT + "/output/"
     p = pathlib.Path(outdir)
     p.mkdir(parents=True, exist_ok=True)
 

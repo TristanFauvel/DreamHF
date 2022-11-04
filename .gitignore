@@ -12,3 +12,4 @@ References/
 *.pyc
 *.html
 wandb/
+notebooks/
