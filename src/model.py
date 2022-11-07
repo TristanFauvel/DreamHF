@@ -44,17 +44,18 @@ X_train, X_test, y_train, y_test, test_sample_ids = Salosensaari_processing(
 
 # %%
 print("Definition of the cross-validation pipeline...")
-model = sksurv_gbt()
-model = xgb_aft()
+#model = sksurv_gbt()
+#model = xgb_aft()
+
+#model = xgbse_weibull()
 model = xgb_optuna()
 model = xgbse_weibull()
- 
+
 print("Search for optimal hyperparameters...")
-preds_test = model.model_pipeline(X_train, y_train, X_test)
+preds_test, model = model.model_pipeline(X_train, y_train, X_test)
 
 # %%
 # Return predictions
 postprocessing(preds_test, test_sample_ids, ROOT)
 
 print("Task completed.")
-# %%

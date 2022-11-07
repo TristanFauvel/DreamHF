@@ -1,7 +1,7 @@
-import xgboost as xgb
-from xgbse.converters import convert_data_to_xgb_format, convert_y
-from sksurv.metrics import concordance_index_censored
 import pandas as pd
+import xgboost as xgb
+from sksurv.metrics import concordance_index_censored
+from xgbse.converters import convert_data_to_xgb_format, convert_y
 
 
 def harrel_c(y_true, y_pred):
@@ -24,7 +24,7 @@ DEFAULT_PARAMS = {
     "booster": "dart",
 }
 
- 
+
 class XGBSurvival:
     def __init__(
         self,
@@ -102,7 +102,7 @@ class XGBSurvival:
     def score(self, X, y):
 
         if isinstance(X, pd.DataFrame):
-            X = X.values
+            X = X
 
         risk_score = -self.predict(X)
         event, time = convert_y(y)
@@ -111,3 +111,11 @@ class XGBSurvival:
 
         return concordance_index_censored(event, time, risk_score)[0]
 
+
+"""
+if isinstance(X, pd.DataFrame) and not dtrain.feature_names:
+    dtrain.feature_names = X
+
+if isinstance(X, pd.DataFrame):
+    data_dmatrix = xgb.DMatrix(data=X, label=y)
+"""
