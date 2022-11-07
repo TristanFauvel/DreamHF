@@ -50,16 +50,15 @@ def create_pipeline(model):
     return regressor
 
 
-def postprocessing(preds_test, test_sample_ids):
+def postprocessing(preds_test, test_sample_ids, root):
     # Check that the predictions do not contain NaN, +inf or -inf
     if np.any(np.isnan(preds_test)) or np.any(np.isinf(preds_test)):
         raise ValueError("Predictions contain invalid values (NaN or inf)")
 
-    # Save results
-    ROOT = os.environ.get("ROOT_FOLDER")
+    # Save results 
     results = pd.DataFrame({"Score": preds_test}, index=test_sample_ids)
     results.index.name = "SampleID"
-    outdir = ROOT + "/output/"
+    outdir = root + "/output/"
     p = pathlib.Path(outdir)
     p.mkdir(parents=True, exist_ok=True)
 

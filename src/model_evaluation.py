@@ -8,14 +8,16 @@ from sksurv.metrics import (
     integrated_brier_score,
 )
 
-from src.HosmerLemeshowSurvival import HosmerLemeshowSurvival
-from src.xgboost_wrapper import XGBSurvival
+from HosmerLemeshowSurvival import HosmerLemeshowSurvival
+from xgboost_wrapper import XGBSurvival
 
 def evaluate_model(model, X_train, X_test, y_train, y_test):
     preds_train = model.predict(X_train)
     preds_test = model.predict(X_test)
-
-    y = np.concatenate([y_train.Event_time, y_test.Event_time])
+    
+    event_field, time_field = y_train.dtype.names
+     
+    y = np.concatenate([y_train[time_field], y_test[time_field]])
     times = np.percentile(
         y, np.linspace(5, 95, 15)
     )  
@@ -28,7 +30,7 @@ def evaluate_model(model, X_train, X_test, y_train, y_test):
     #  Truncation time. The survival function for the underlying
     # censoring time distribution needs to be positive at tau
 
-    event_field, time_field = y_train.dtype.names
+     
 
     #%% Harrel's concordance index
     # Harrel's concordance index C is defined as the proportion of

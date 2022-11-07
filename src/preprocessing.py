@@ -154,8 +154,11 @@ def _centered_log_transform(readcounts_df):
 
 
 def Salosensaari_processing(
-    pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test
+    pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates
 ):
+    pheno_df_train = pheno_df_train.loc[:, clinical_covariates+ ["Event", "Event_time"]]
+    pheno_df_test = pheno_df_test.loc[:, clinical_covariates + ["Event", "Event_time"]]
+
     readcounts_df_train = _taxa_aggregation(readcounts_df_train)
     selection = _taxa_filtering(readcounts_df_train)
     readcounts_df_train = readcounts_df_train.loc[:, selection]
@@ -177,8 +180,13 @@ def Salosensaari_processing(
 
 
 def standard_processing(
-    pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test
+    pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates
 ):
+    pheno_df_train = pheno_df_train.loc[:, clinical_covariates+
+        ["Event", "Event_time"]]
+    pheno_df_test = pheno_df_test.loc[:, clinical_covariates+
+        ["Event", "Event_time"]]
+
     df_train = pheno_df_train.join(readcounts_df_train)
     df_test = pheno_df_test.join(readcounts_df_test)
     covariates = df_train.loc[

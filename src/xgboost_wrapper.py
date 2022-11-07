@@ -110,3 +110,4 @@ class XGBSurvival:
         # that the model can order correctly in terms of survival times.
 
         return concordance_index_censored(event, time, risk_score)[0]
+

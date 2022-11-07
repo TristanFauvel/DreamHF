@@ -4,3 +4,4 @@ from .preprocessing import load_data, Salosensaari_processing, standard_processi
 from .xgboost_wrapper import XGBSurvival, harrel_c, DEFAULT_PARAMS
 from .taxonomy import newickify_taxonomy
 from .HosmerLemeshowSurvival import HosmerLemeshowSurvival
+from .survival_models import sksurv_gbt, xgb_aft, xgb_optuna
