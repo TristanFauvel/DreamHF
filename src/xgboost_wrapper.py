@@ -25,7 +25,7 @@ DEFAULT_PARAMS = {
 }
 
 
-class XGBSurvival:
+class XGBSurvival(xgb.Booster):
     def __init__(
         self,
         xgb_params=None,
@@ -78,20 +78,7 @@ class XGBSurvival:
         return self
 
     def predict(self, X):
-        """
-        Predicts survival probabilities using the XGBoost + Logistic Regression pipeline.
-        Args:
-            X (pd.DataFrame): Dataframe of features to be used as input for the
-                XGBoost model.
-            return_interval_probs (Bool): Boolean indicating if interval probabilities are
-                supposed to be returned. If False the cumulative survival is returned.
-                Default is False.
-        Returns:
-            pd.DataFrame: A dataframe of survival probabilities
-            for all times (columns), from a time_bins array, for all samples of X
-            (rows). If return_interval_probs is True, the interval probabilities are returned
-            instead of the cumulative survival probabilities.
-        """
+        # Predictions are the time to event.
 
         # converting to xgb format
         d_matrix = xgb.DMatrix(X)
@@ -100,22 +87,9 @@ class XGBSurvival:
         return preds
 
     def score(self, X, y):
-
-        if isinstance(X, pd.DataFrame):
-            X = X
-
         risk_score = -self.predict(X)
         event, time = convert_y(y)
         # Harrel's concordance index C is defined as the proportion of observations
         # that the model can order correctly in terms of survival times.
 
         return concordance_index_censored(event, time, risk_score)[0]
-
-
-"""
-if isinstance(X, pd.DataFrame) and not dtrain.feature_names:
-    dtrain.feature_names = X
-
-if isinstance(X, pd.DataFrame):
-    data_dmatrix = xgb.DMatrix(data=X, label=y)
-"""

@@ -50,10 +50,15 @@ print("Definition of the cross-validation pipeline...")
 #model = xgbse_weibull()
 model = xgb_optuna()
 model = xgbse_weibull()
-
+model = xgb_aft()
 print("Search for optimal hyperparameters...")
 preds_test, model = model.model_pipeline(X_train, y_train, X_test)
 
+
+################
+# %%
+score = model.evaluate(X_train, X_test, y_train, y_test)
+print(score)
 # %%
 # Return predictions
 postprocessing(preds_test, test_sample_ids, ROOT)

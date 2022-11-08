@@ -11,7 +11,6 @@ from xgbse import XGBSEStackedWeibull
 from xgbse.converters import convert_y
 from xgbse.metrics import concordance_index
 
-from model_evaluation import evaluate_model
 from pipeline import EarlyStoppingMonitor, create_pipeline
 from xgboost_wrapper import XGBSurvival
 
@@ -54,7 +53,36 @@ class candidate_model:
         return self
 
     def evaluate(self, X_train, X_test, y_train, y_test):
-        return evaluate_model(self.estimator, X_train, X_test, y_train, y_test)
+        n_splits = 4
+        n_repeats = 1
+        rkf = RepeatedKFold(
+            n_splits=n_splits, n_repeats=n_repeats, random_state=0
+        )
+        X_values = X_train
+        y_values = y_train
+        for train_index, test_index in rkf.split(X_values):
+            X_A, X_B = X_values.iloc[train_index,
+                                     :], X_values.iloc[test_index, :]
+            y_A, y_B = y_values[train_index], y_values[test_index]
+
+            if not check_is_fitted(self.estimator):
+                self.estimator[:-1].fit(X_A, y_A)
+
+            X_B_transformed = self.estimator.named_steps['preprocessor'].transform(
+                X_B)
+
+            if hasattr(self.estimator, 'EARLY_STOPPING_ROUNDS'):
+                self.estimator.fit(
+                    X_A,
+                    y_A,
+                    validation_data=(X_B_transformed, y_B),
+                    early_stopping_rounds=self.EARLY_STOPPING_ROUNDS,
+                )
+            else:
+                self.estimator.fit(X_A, y_A)
+            score += self.estimator.score(X_B, y_B)
+        score = score/(n_splits*n_repeats)
+        return score
 
 
 class sksurv_gbt(candidate_model):
@@ -68,13 +96,13 @@ class sksurv_gbt(candidate_model):
 
         self.distributions = dict(
             model__learning_rate=uniform(loc=0, scale=1),
-            model__max_depth=randint(1, 4),
+            model__max_depth=randint(1, 8),
             model__loss=["coxph"],
-            model__n_estimators=uniform(loc=30, scale=150),
+            model__n_estimators=uniform(loc=30, scale=250),
             model__min_samples_split=randint(2, 10),
             model__min_samples_leaf=randint(1, 10),
             model__subsample=uniform(loc=0.5, scale=0.5),
-            model__max_leaf_nodes=randint(2, 10),
+            model__max_leaf_nodes=randint(2, 30),
             model__dropout_rate=uniform(loc=0, scale=1),
         )
 
@@ -83,7 +111,7 @@ class sksurv_gbt(candidate_model):
             self.estimator,
             self.distributions,
             random_state=0,
-            n_iter=2,
+            n_iter=200,
             n_jobs=-1,
             verbose=2,
         )
@@ -182,20 +210,20 @@ class xgb_optuna(candidate_model):
     def __init__(self):
         super().__init__()
         # repeated K-folds
-        self.N_SPLITS = 10
+        self.N_SPLITS = 3
         self.N_REPEATS = 1
 
         # Optuna
         self.N_TRIALS = 100
         self.RS = 124  # random state
         # XGBoost
-        self.EARLY_STOPPING_ROUNDS = 100
+        self.EARLY_STOPPING_ROUNDS = 50
         self.MULTIVARIATE = True
 
         self.N_JOBS = -1  # number of parallel threads
 
         self.sampler = TPESampler(seed=self.RS, multivariate=self.MULTIVARIATE)
-        self.optimal_hp = {
+        self.base_params = {
             "objective": "survival:aft",
             "eval_metric": "aft-nloglik",
             "aft_loss_distribution": "normal",
@@ -212,7 +240,7 @@ class xgb_optuna(candidate_model):
             "seed": self.RS,
         }
 
-        self.model = XGBSurvival(self.optimal_hp, num_boost_round=10000)
+        self.model = XGBSurvival(self.base_params, num_boost_round=10000)
         self.estimator = create_pipeline(self.model)
 
     def cross_validation(self, X_train, y_train):
@@ -226,11 +254,11 @@ class xgb_optuna(candidate_model):
                 random_state=self.RS,
                 n_splits=self.N_SPLITS,
                 n_repeats=self.N_REPEATS,
-                n_jobs=1,
+                n_jobs=-1,
                 early_stopping_rounds=self.EARLY_STOPPING_ROUNDS,
             ),
             n_trials=self.N_TRIALS,
-            n_jobs=1,
+            n_jobs=-1,
         )
         self.optimal_hp = study.best_params
 
@@ -242,7 +270,7 @@ class xgb_optuna(candidate_model):
         random_state=22,
         n_splits=3,
         n_repeats=2,
-        n_jobs=1,
+        n_jobs=-1,
         early_stopping_rounds=50,
     ):
         # XGBoost parameters
@@ -251,12 +279,12 @@ class xgb_optuna(candidate_model):
             "objective": "survival:aft",
             "eval_metric": "aft-nloglik",
             "aft_loss_distribution": "normal",
-            "aft_loss_distribution_scale": 1.20,
+            "aft_loss_distribution_scale": trial.suggest_loguniform('aft_loss_distribution_scale', 0.1, 10.0),
             "tree_method": "hist",
-            "learning_rate": trial.suggest_float("learning_rate", 5e-3, 5e-2, log=True),
+            "learning_rate": trial.suggest_float("learning_rate", 1e-2, 1, log=True),
             "max_depth": trial.suggest_int("max_depth", 2, 12),
             "booster": "dart",
-            "subsample": trial.suggest_float("subsample", 0.4, 0.8, log=True),
+            "subsample": trial.suggest_float("subsample", 0.4, 0.8, log=False),
             "alpha": trial.suggest_float("alpha", 0.01, 10.0, log=True),
             "lambda": trial.suggest_float("lambda", 1e-8, 10.0, log=True),
             "gamma": trial.suggest_float("lambda", 1e-8, 10.0, log=True),
@@ -304,30 +332,3 @@ class xgb_optuna(candidate_model):
             verbose_eval=0,
             early_stopping_rounds=self.EARLY_STOPPING_ROUNDS,
         )
-
-    def model_evaluation(self, X_train, y_train, X_test, y_test):
-        rkf = RepeatedKFold(
-            n_splits=self.N_SPLITS, n_repeats=self.N_REPEATS, random_state=self.RS
-        )
-        X_values = X_train
-        y_values = y_train
-        for train_index, test_index in rkf.split(X_values):
-            X_A, X_B = X_values.iloc[train_index,
-                                     :], X_values.iloc[test_index, :]
-            y_A, y_B = y_values[train_index], y_values[test_index]
-
-            if not check_is_fitted(self.estimator):
-                self.estimator[:-1].fit(X_A, y_A)
-
-            X_B_transformed = self.estimator.named_steps['preprocessor'].transform(
-                X_B)
-
-            self.estimator.fit(
-                X_A,
-                y_A,
-                validation_data=(X_B_transformed, y_B),
-                verbose_eval=0,
-                early_stopping_rounds=self.EARLY_STOPPING_ROUNDS,
-            )
-            y_pred += self.estimator.predict(X_test)
-        y_pred /= self.N_REPEATS * self.N_SPLITS
