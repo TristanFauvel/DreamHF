@@ -53,44 +53,17 @@ class candidate_model:
         return self
 
     def evaluate(self, X_train, X_test, y_train, y_test):
-        n_splits = 4
-        n_repeats = 1
-        rkf = RepeatedKFold(
-            n_splits=n_splits, n_repeats=n_repeats, random_state=0
-        )
-        X_values = X_train
-        y_values = y_train
-        for train_index, test_index in rkf.split(X_values):
-            X_A, X_B = X_values.iloc[train_index,
-                                     :], X_values.iloc[test_index, :]
-            y_A, y_B = y_values[train_index], y_values[test_index]
-
-            if not check_is_fitted(self.estimator):
-                self.estimator[:-1].fit(X_A, y_A)
-
-            X_B_transformed = self.estimator.named_steps['preprocessor'].transform(
-                X_B)
-
-            if hasattr(self.estimator, 'EARLY_STOPPING_ROUNDS'):
-                self.estimator.fit(
-                    X_A,
-                    y_A,
-                    validation_data=(X_B_transformed, y_B),
-                    early_stopping_rounds=self.EARLY_STOPPING_ROUNDS,
-                )
-            else:
-                self.estimator.fit(X_A, y_A)
-            score += self.estimator.score(X_B, y_B)
-        score = score/(n_splits*n_repeats)
-        return score
+        score_training = self.estimator.score(X_train, y_train)
+        score_test = self.estimator.score(X_test, y_test)
+        return score_training, score_test
 
 
 class sksurv_gbt(candidate_model):
     def __init__(self):
         super().__init__()
         self.monitor = EarlyStoppingMonitor(25, 50)
-        self.model = create_pipeline(GradientBoostingSurvivalAnalysis())
-        self.estimator.fit = lambda X_train, y_train: self.model.fit(
+        self.estimator = create_pipeline(GradientBoostingSurvivalAnalysis())
+        self.estimator.fit = lambda X_train, y_train: self.estimator.fit(
             X_train, y_train, model__monitor=self.monitor
         )
 
@@ -179,7 +152,6 @@ class xgbse_weibull(candidate_model):
             n_iter=3,  # 300
             n_jobs=-1,
             verbose=2,
-            error_score='raise'
         )
         search = randsearchcv.fit(X_train, y_train)
         self.estimator = search.best_estimator_
@@ -296,13 +268,12 @@ class xgb_optuna(candidate_model):
         rkf = RepeatedKFold(
             n_splits=n_splits, n_repeats=n_repeats, random_state=random_state
         )
-        X_values = X
-        y_values = y
+
         score = 0
-        for train_index, test_index in rkf.split(X_values):
-            X_A, X_B = X_values.iloc[train_index,
-                                     :], X_values.iloc[test_index, :]
-            y_A, y_B = y_values[train_index], y_values[test_index]
+        for train_index, test_index in rkf.split(X):
+            X_A, X_B = X.iloc[train_index,
+                              :], X.iloc[test_index, :]
+            y_A, y_B = y[train_index], y[test_index]
 
             if not check_is_fitted(estimator):
                 estimator[:-1].fit(X_A, y_A)
@@ -323,12 +294,29 @@ class xgb_optuna(candidate_model):
         return score
 
     def fit(self, X_train, y_train):
-        estimator = XGBSurvival(self.optimal_hp, num_boost_round=10000)
+        self.estimator = XGBSurvival(self.optimal_hp, num_boost_round=10000)
 
-        # WARNING : use a pipeline
-        estimator.fit(
-            X_train,
-            y_train,
-            verbose_eval=0,
-            early_stopping_rounds=self.EARLY_STOPPING_ROUNDS,
+        n_splits = 1
+        n_repeats = 1
+        rkf = RepeatedKFold(
+            n_splits=n_splits, n_repeats=n_repeats, random_state=0
         )
+        for train_index, test_index in rkf.split(X_train):
+            X_A, X_B = X_train.iloc[train_index,
+                                    :], X_train.iloc[test_index, :]
+            y_A, y_B = y_train[train_index], y_train[test_index]
+
+            if not check_is_fitted(self.estimator):
+                self.estimator[:-1].fit(X_A, y_A)
+
+            X_B_transformed = self.estimator.named_steps['preprocessor'].transform(
+                X_B)
+
+            self.estimator.fit(
+                X_A,
+                y_A,
+                model__validation_data=(X_B_transformed, y_B),
+                model__verbose_eval=0,
+                model__early_stopping_rounds=self.early_stopping_rounds,
+            )
+        return self
