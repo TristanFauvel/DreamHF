@@ -12,7 +12,7 @@ arguments = sys.argv
 
 
 ####
-arguments = [0, '/home/tristan/Desktop/Repos/DreamHF']
+#arguments = [0, '/home/tristan/Desktop/Repos/DreamHF']
 
 ####
 try:
@@ -62,6 +62,10 @@ print(score_test)
 # %%
 # Return predictions
 postprocessing(preds_test, test_sample_ids, ROOT)
+
+# save the model to disk
+filename = 'trained_model.sav'
+pickle.dump(model, open(filename, 'wb'))
 
 print("Task completed.")
 
