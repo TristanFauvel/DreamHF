@@ -1,14 +1,13 @@
 # %%
-import synapseclient
-from synapseclient import File
 import os
-from dotenv import load_dotenv
-from zipfile import ZipFile
-from os.path import basename
-import shutil
 import pathlib
+import shutil
+from os.path import basename
+from zipfile import ZipFile
+
+import synapseclient
 from dotenv import load_dotenv
-import os
+from synapseclient import File
 
 load_dotenv()
 ROOT = os.environ.get("ROOT_FOLDER")
@@ -30,7 +29,7 @@ shutil.copyfile(ROOT + "/singularity/container.sif",
 outdir = ROOT + "/output/" + submission_name + "/output/"
 p = pathlib.Path(outdir)
 p.mkdir(parents=True, exist_ok=True)
-shutil.copyfile(ROOT + "/output/score.csv", outdir + "score.csv")
+shutil.copyfile(ROOT + "/output/scores.csv", outdir + "scores.csv")
 
 if submission_type == ".zip":
     file_to_upload = (

@@ -1,11 +1,15 @@
 # %%
-import pandas as pd
+from typing import Tuple
+
 import numpy as np
-from skbio.stats.composition import multiplicative_replacement
-from skbio.stats.composition import clr
+import pandas as pd
+from skbio.stats.composition import clr, multiplicative_replacement
 
+CLINICAL_COVARIATES = ['Age', 'BodyMassIndex', 'Smoking', 'BPTreatment', 'PrevalentDiabetes',
+       'PrevalentCHD', 'PrevalentHFAIL', 'Event', 'Event_time', 'SystolicBP',
+       'NonHDLcholesterol', 'Sex']
 
-def _pheno_processing_pipeline(df, training):
+def _pheno_processing_pipeline(df, training) -> pd.DataFrame:
     df = df.convert_dtypes()
 
     if "Event" in df:
@@ -27,7 +31,7 @@ def _pheno_processing_pipeline(df, training):
     return df
 
 
-def _readcounts_processing_pipeline(df):
+def _readcounts_processing_pipeline(df) -> pd.DataFrame:
     df = df.transpose()
     df.columns = df.iloc[0]
     df = df.drop(labels=["Unnamed: 0"], axis=0)
@@ -35,7 +39,7 @@ def _readcounts_processing_pipeline(df):
     return df
 
 
-def _remove_unique_columns(df_train, df_test):
+def _remove_unique_columns(df_train, df_test) -> Tuple[pd.DataFrame, pd.DataFrame]:
     for col in df_test.columns:
         if len(df_test[col].unique()) == 1 and len(df_train[col].unique()) == 1:
             df_test.drop(col, inplace=True, axis=1)
@@ -77,7 +81,7 @@ def load_data(root):
     return pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test
 
 
-def _prepare_train_test(df_train, df_test, covariates):
+def _prepare_train_test(df_train: pd.DataFrame, df_test: pd.DataFrame, covariates):
     # Left truncation : we remove all participants who experienced HF before entering the study.
     selection_train = df_train.loc[:, "Event_time"] >= -np.inf  # 0
 
@@ -101,7 +105,7 @@ def _prepare_train_test(df_train, df_test, covariates):
     return X_train, X_test, y_train, y_test, test_sample_ids
 
 
-def _check_data(df):
+def _check_data(df: pd.DataFrame) -> pd.DataFrame:
     # Check that the input data do not contain NaN
     nan_cols = df.isnull().values.any(axis=0)
     nan_counts = df.isnull().values.sum(axis=0)
@@ -119,7 +123,7 @@ def _check_data(df):
     return df
 
 
-def _taxa_aggregation(readcounts_df, taxonomic_level="s__"):
+def _taxa_aggregation(readcounts_df, taxonomic_level="s__") -> pd.DataFrame:
     # Aggregate the species into genus
     readcounts_df.columns = [
         el.split(taxonomic_level)[0] for el in readcounts_df.columns
@@ -142,7 +146,7 @@ def _taxa_filtering(readcounts_df):
     return selection
 
 
-def _centered_log_transform(readcounts_df):
+def _centered_log_transform(readcounts_df) -> pd.DataFrame:
     ## Centered log transformation
     X_mr = multiplicative_replacement(readcounts_df)
 
@@ -180,18 +184,24 @@ def Salosensaari_processing(
 
 
 def standard_processing(
-    pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates
+    pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, covariates
 ):
+    clinical_covariates = list(np.intersect1d(covariates, CLINICAL_COVARIATES))
     pheno_df_train = pheno_df_train.loc[:, clinical_covariates+
         ["Event", "Event_time"]]
     pheno_df_test = pheno_df_test.loc[:, clinical_covariates+
         ["Event", "Event_time"]]
-
-    df_train = pheno_df_train.join(readcounts_df_train)
-    df_test = pheno_df_test.join(readcounts_df_test)
+    
+    if any(~np.isin(covariates, CLINICAL_COVARIATES)):
+        df_train = pheno_df_train.join(readcounts_df_train)
+        df_test = pheno_df_test.join(readcounts_df_test)
+    else:
+        df_train = pheno_df_train
+        df_test = pheno_df_test
+        
     covariates = df_train.loc[
-        :, (df_train.columns != "Event") & (df_train.columns != "Event_time")
-    ].columns
+            :, (df_train.columns != "Event") & (df_train.columns != "Event_time")
+        ].columns
     X_train, X_test, y_train, y_test, test_sample_ids = _prepare_train_test(
         df_train, df_test, covariates
     )

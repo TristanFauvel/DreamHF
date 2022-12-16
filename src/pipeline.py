@@ -1,14 +1,14 @@
 # %%
-import pandas as pd
-import numpy as np
 import os
 import pathlib
 
-from sklearn.compose import make_column_selector as selector
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler, FunctionTransformer
-from sklearn.impute import SimpleImputer
+import numpy as np
+import pandas as pd
 from sklearn.compose import ColumnTransformer
+from sklearn.compose import make_column_selector as selector
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer, StandardScaler
 from sklearn.utils import estimator_html_repr
 
 
@@ -62,7 +62,7 @@ def postprocessing(preds_test, test_sample_ids, root):
     p = pathlib.Path(outdir)
     p.mkdir(parents=True, exist_ok=True)
 
-    results.to_csv(outdir + "score.csv")
+    results.to_csv(outdir + "scores.csv")
 
 
 class EarlyStoppingMonitor:

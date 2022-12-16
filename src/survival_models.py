@@ -4,6 +4,7 @@ from optuna.samplers import TPESampler
 from scipy.stats import randint, uniform
 from sklearn.metrics import make_scorer
 from sklearn.model_selection import RandomizedSearchCV, RepeatedKFold
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.utils.validation import check_is_fitted
 from sksurv.ensemble import GradientBoostingSurvivalAnalysis
 from sksurv.metrics import concordance_index_censored
@@ -47,7 +48,19 @@ class candidate_model:
         self = self.cross_validation(X_train, y_train)
         self = self.fit(X_train, y_train)
         predictions = self.predict(X_test)
-        return predictions, self
+        
+        # Returns the (normalized) risk score  
+        method = getattr(self, "predict_proba", None)
+        if callable(method):
+            survival_prob = self.predict_proba(X_test)
+            risk_score = 1-survival_prob
+        else:
+            #If loss=’coxph’, predictions can be interpreted as log hazard ratio corresponding to the linear predictor of a Cox proportional hazards model. If loss=’squared’ or loss=’ipcwls’, predictions are the time to event.
+            predictions = self.predict(X_test)
+            scaler = MinMaxScaler()
+            risk_score = scaler.fit_transform(-predictions)
+            #The range of this number has to be between 0 and 1, with larger numbers being associated with higher probability of having HF. The values, -Inf, Inf and NA, are not allowed. 
+        return risk_score, self
 
     def cross_validation(self, X_train, y_train):
         return self
