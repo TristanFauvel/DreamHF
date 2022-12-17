@@ -4,13 +4,16 @@ import pathlib
 
 import numpy as np
 import pandas as pd
+import sklearn
 from sklearn.compose import ColumnTransformer
 from sklearn.compose import make_column_selector as selector
+from sklearn.decomposition import PCA
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, StandardScaler
 from sklearn.utils import estimator_html_repr
 
+sklearn.set_config(transform_output="pandas")
 
 def create_pipeline(model):
     def bool2cat(df):
@@ -91,3 +94,47 @@ class EarlyStoppingMonitor:
         # in last max_iter_without_improvement iterations
         diff = iteration - self._best_step
         return diff >= self.max_iter_without_improvement
+
+
+def create_pipeline_with_pca(model):
+    def bool2cat(df):
+        return df.astype("category")
+
+    def cat2bool(df):
+        return df.astype("bool")
+
+    bool2cat = FunctionTransformer(bool2cat)
+    cat2bool = FunctionTransformer(cat2bool)
+
+    numeric_transformer = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="mean")),
+            ("scaler", StandardScaler()),
+        ]
+    )
+
+    categorical_transformer = Pipeline(
+        steps=[
+            ("bool2cat", bool2cat),
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("cat2bool", cat2bool),
+        ]
+    )
+
+    pca = PCA(n_components=0.98)
+    pca_transformer = ColumnTransformer(
+        transformers=[("pca", pca, selector(pattern="k__"))], remainder='passthrough')
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("num", numeric_transformer, selector(dtype_exclude="bool")),
+            ("cat", categorical_transformer, selector(dtype_include="bool")),
+        ]
+    )
+
+    regressor = Pipeline(
+        steps=[("preprocessor", preprocessor), ("pca", pca_transformer), ("model", model)])
+
+    with open("regressor.html", "w") as f:
+        f.write(estimator_html_repr(regressor))
+    return regressor

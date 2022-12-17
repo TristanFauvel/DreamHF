@@ -183,21 +183,51 @@ def Salosensaari_processing(
     return X_train, X_test, y_train, y_test, test_sample_ids
 
 
-def standard_processing(
-    pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, covariates
-):
-    clinical_covariates = list(np.intersect1d(covariates, CLINICAL_COVARIATES))
-    pheno_df_train = pheno_df_train.loc[:, clinical_covariates+
+def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates, taxa = None):      
+    
+    if np.setdiff1d(clinical_covariates, CLINICAL_COVARIATES):
+        raise(ValueError('One of the clinical covariates is not in the prespecified list'))
+    
+    pheno_df_train = pheno_df_train.loc[:, list(clinical_covariates)+
         ["Event", "Event_time"]]
-    pheno_df_test = pheno_df_test.loc[:, clinical_covariates+
+    pheno_df_test = pheno_df_test.loc[:, list(clinical_covariates)+
         ["Event", "Event_time"]]
     
-    if any(~np.isin(covariates, CLINICAL_COVARIATES)):
-        df_train = pheno_df_train.join(readcounts_df_train)
-        df_test = pheno_df_test.join(readcounts_df_test)
-    else:
+    if taxa is None:
         df_train = pheno_df_train
         df_test = pheno_df_test
+    else:
+        df_clr_train = _centered_log_transform(readcounts_df_train.loc[:,taxa])
+        df_clr_test = _centered_log_transform(readcounts_df_test.loc[:,taxa])
+       
+        df_train = pheno_df_train.join(df_clr_train)
+        df_test = pheno_df_test.join(df_clr_test)  
+    
+    covariates = df_train.loc[
+            :, (df_train.columns != "Event") & (df_train.columns != "Event_time")
+        ].columns
+    X_train, X_test, y_train, y_test, test_sample_ids = _prepare_train_test(
+        df_train, df_test, covariates
+    )
+    return X_train, X_test, y_train, y_test, test_sample_ids
+
+
+def standard_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates, taxa = None):      
+    
+    if np.setdiff1d(clinical_covariates, CLINICAL_COVARIATES):
+        raise(ValueError('One of the clinical covariates is not in the prespecified list'))
+    
+    pheno_df_train = pheno_df_train.loc[:, list(clinical_covariates)+
+        ["Event", "Event_time"]]
+    pheno_df_test = pheno_df_test.loc[:, list(clinical_covariates)+
+        ["Event", "Event_time"]]
+    
+    if taxa is None:
+        df_train = pheno_df_train
+        df_test = pheno_df_test
+    else:
+        df_train = pheno_df_train.join(readcounts_df_train.loc[:,taxa])
+        df_test = pheno_df_test.join(readcounts_df_test.loc[:, taxa])
         
     covariates = df_train.loc[
             :, (df_train.columns != "Event") & (df_train.columns != "Event_time")
