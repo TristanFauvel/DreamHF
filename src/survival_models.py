@@ -12,7 +12,7 @@ from xgbse import XGBSEStackedWeibull
 from xgbse.converters import convert_y
 from xgbse.metrics import concordance_index
 
-from pipeline import EarlyStoppingMonitor, create_pipeline
+from pipeline import EarlyStoppingMonitor, create_pipeline, create_pipeline_with_pca
 from xgboost_wrapper import XGBSurvival
 
 
@@ -44,9 +44,12 @@ class candidate_model:
         predictions = self.estimator.predict(X_test)
         return predictions
 
-    def model_pipeline(self, X_train, y_train, X_test):
+    def model_pipeline(self, X_train, y_train):
         self = self.cross_validation(X_train, y_train)
         self = self.fit(X_train, y_train)
+        return self
+        
+    def risk_score(self, X_test):
         predictions = self.predict(X_test)
         
         # Returns the (normalized) risk score  
@@ -58,9 +61,9 @@ class candidate_model:
             #If loss=’coxph’, predictions can be interpreted as log hazard ratio corresponding to the linear predictor of a Cox proportional hazards model. If loss=’squared’ or loss=’ipcwls’, predictions are the time to event.
             predictions = self.predict(X_test)
             scaler = MinMaxScaler()
-            risk_score = scaler.fit_transform(-predictions)
+            risk_score = scaler.fit_transform(-predictions.reshape(-1, 1))
             #The range of this number has to be between 0 and 1, with larger numbers being associated with higher probability of having HF. The values, -Inf, Inf and NA, are not allowed. 
-        return risk_score, self
+        return risk_score.to_numpy().flatten()
 
     def cross_validation(self, X_train, y_train):
         return self
@@ -72,10 +75,18 @@ class candidate_model:
 
 
 class sksurv_gbt(candidate_model):
-    def __init__(self):
+    def __init__(self, with_pca = False):
         super().__init__()
         self.monitor = EarlyStoppingMonitor(25, 50)
-        self.estimator = create_pipeline(GradientBoostingSurvivalAnalysis())
+        
+        
+        self.with_pca = with_pca
+        self.model = GradientBoostingSurvivalAnalysis()
+        if with_pca : 
+            self.estimator = create_pipeline_with_pca(self.model)    
+        else:
+            self.estimator = create_pipeline(self.model)
+        
         self.estimator.fit = lambda X_train, y_train: self.estimator.fit(
             X_train, y_train, model__monitor=self.monitor
         )
@@ -84,7 +95,7 @@ class sksurv_gbt(candidate_model):
             model__learning_rate=uniform(loc=0, scale=1),
             model__max_depth=randint(1, 8),
             model__loss=["coxph"],
-            model__n_estimators=uniform(loc=30, scale=250),
+            model__n_estimators=randint(100, 350),
             model__min_samples_split=randint(2, 10),
             model__min_samples_leaf=randint(1, 10),
             model__subsample=uniform(loc=0.5, scale=0.5),
@@ -97,14 +108,14 @@ class sksurv_gbt(candidate_model):
             self.estimator,
             self.distributions,
             random_state=0,
-            n_iter=200,
+            n_iter=4,
             n_jobs=-1,
             verbose=2,
+            #error_score='raise',
         )
         search = randsearchcv.fit(X_train, y_train)
         self.estimator = search.best_estimator_
         return self
-
 
 class sklearn_wei(XGBSEStackedWeibull):
     """ Workaround to use crossvalidation from

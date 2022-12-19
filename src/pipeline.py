@@ -8,6 +8,7 @@ import sklearn
 from sklearn.compose import ColumnTransformer
 from sklearn.compose import make_column_selector as selector
 from sklearn.decomposition import PCA
+from sklearn.feature_selection import SelectKBest
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, StandardScaler
@@ -97,6 +98,7 @@ class EarlyStoppingMonitor:
 
 
 def create_pipeline_with_pca(model):
+      
     def bool2cat(df):
         return df.astype("category")
 

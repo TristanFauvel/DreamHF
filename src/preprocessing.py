@@ -3,11 +3,19 @@ from typing import Tuple
 
 import numpy as np
 import pandas as pd
+import sklearn
 from skbio.stats.composition import clr, multiplicative_replacement
+from sklearn.feature_selection import SelectKBest
 
 CLINICAL_COVARIATES = ['Age', 'BodyMassIndex', 'Smoking', 'BPTreatment', 'PrevalentDiabetes',
        'PrevalentCHD', 'PrevalentHFAIL', 'Event', 'Event_time', 'SystolicBP',
        'NonHDLcholesterol', 'Sex']
+
+
+def relative_abundance(readcounts_df):
+    total = readcounts_df.sum(axis=1)
+    proportions_df = readcounts_df.divide(total, axis="rows")
+    return proportions_df
 
 def _pheno_processing_pipeline(df, training) -> pd.DataFrame:
     df = df.convert_dtypes()
@@ -19,6 +27,11 @@ def _pheno_processing_pipeline(df, training) -> pd.DataFrame:
     if "Event_time" in df:
         df.dropna(subset=["Event_time"], inplace=True)
         df = df.astype({"Event_time": "float64"})
+        
+    for covariate in CLINICAL_COVARIATES:
+        if covariate in df and covariate in ['Smoking', 'BPTreatment', 'PrevalentDiabetes',
+                                             'PrevalentCHD', 'PrevalentHFAIL','Sex']:
+            df = df.astype({covariate:"bool"})
 
     df.set_index("Unnamed: 0", inplace=True)
 
@@ -48,7 +61,7 @@ def _remove_unique_columns(df_train, df_test) -> Tuple[pd.DataFrame, pd.DataFram
 
 
 def load_data(root):
-    
+    # Load data from files
     pheno_df_train = pd.read_csv(root + "/train/pheno_training.csv")
     pheno_df_train = _pheno_processing_pipeline(pheno_df_train, training=True)
 
@@ -61,10 +74,12 @@ def load_data(root):
     readcounts_df_test = pd.read_csv(root + "/test/readcounts_test.csv")
     readcounts_df_test = _readcounts_processing_pipeline(readcounts_df_test)
 
+    # Remove unique columns from the readcounts data
     readcounts_df_train, readcounts_df_test = _remove_unique_columns(
         readcounts_df_train, readcounts_df_test
     )
 
+    # Check the correspondence between the two tables
     idx_pheno_train = pheno_df_train.index
     idx_pheno_test = pheno_df_test.index
     idx_read_train = readcounts_df_train.index
@@ -236,3 +251,17 @@ def standard_processing(pheno_df_train, pheno_df_test, readcounts_df_train, read
         df_train, df_test, covariates
     )
     return X_train, X_test, y_train, y_test, test_sample_ids
+
+
+def taxa_selection(pheno_df_train, readcounts_df_train):
+    event_df = pheno_df_train['Event']
+    threshold = 1e-5
+    proportions_df=relative_abundance(readcounts_df_train)
+    presence_df=proportions_df >= threshold
+
+    kbest = SelectKBest(
+        sklearn.feature_selection.mutual_info_classif, k=200)
+
+    kbest.fit(presence_df, event_df)
+    return kbest.get_feature_names_out()
+# %%
