@@ -1,8 +1,8 @@
 import numpy as np
-from sklearn.utils import check_consistent_length
-from sksurv.nonparametric import kaplan_meier_estimator
 import pandas as pd
 from scipy.stats import chi2
+from sklearn.utils import check_consistent_length
+from sksurv.nonparametric import kaplan_meier_estimator
 
 
 class _ExtentedStepFunction:

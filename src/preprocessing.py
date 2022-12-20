@@ -27,11 +27,9 @@ def _pheno_processing_pipeline(df, training) -> pd.DataFrame:
     if "Event_time" in df:
         df.dropna(subset=["Event_time"], inplace=True)
         df = df.astype({"Event_time": "float64"})
-        
-    for covariate in CLINICAL_COVARIATES:
-        if covariate in df and covariate in ['Smoking', 'BPTreatment', 'PrevalentDiabetes',
-                                             'PrevalentCHD', 'PrevalentHFAIL','Sex']:
-            df = df.astype({covariate:"bool"})
+          
+    #df = df.astype({'Smoking': 'category', 'PrevalentCHD': 'category', 'BPTreatment': 'category', 'PrevalentDiabetes': 'category', 'PrevalentHFAIL': 'category',
+                   # 'Sex': 'category', 'Event': 'category'})
 
     df.set_index("Unnamed: 0", inplace=True)
 
@@ -198,8 +196,21 @@ def Salosensaari_processing(
     return X_train, X_test, y_train, y_test, test_sample_ids
 
 
-def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates, taxa = None):      
+def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates, n_taxa):      
     
+    select_taxa= True
+    while select_taxa:
+        if n_taxa > 0:
+            taxa = taxa_selection(pheno_df_train, readcounts_df_train, n_taxa)
+        else :
+            taxa= None
+            
+        if all(readcounts_df_train.loc[:, taxa].sum(axis=1) > 0):
+            select_taxa = False
+        else:
+            # _centered_log_transform does not work otherwise (ValueError: Input matrix cannot have rows with all zeros)
+            n_taxa = n_taxa + 1
+           
     if np.setdiff1d(clinical_covariates, CLINICAL_COVARIATES):
         raise(ValueError('One of the clinical covariates is not in the prespecified list'))
     
@@ -253,14 +264,17 @@ def standard_processing(pheno_df_train, pheno_df_test, readcounts_df_train, read
     return X_train, X_test, y_train, y_test, test_sample_ids
 
 
-def taxa_selection(pheno_df_train, readcounts_df_train):
+def taxa_selection(pheno_df_train, readcounts_df_train, n_taxa = 200):
+    
+    if n_taxa<=0:
+        raise ValueError('n_taxa must be >0')
     event_df = pheno_df_train['Event']
     threshold = 1e-5
     proportions_df=relative_abundance(readcounts_df_train)
     presence_df=proportions_df >= threshold
 
     kbest = SelectKBest(
-        sklearn.feature_selection.mutual_info_classif, k=200)
+        sklearn.feature_selection.mutual_info_classif, k=n_taxa)
 
     kbest.fit(presence_df, event_df)
     return kbest.get_feature_names_out()

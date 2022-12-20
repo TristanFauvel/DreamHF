@@ -2,17 +2,25 @@
 from optuna import create_study
 from optuna.samplers import TPESampler
 from scipy.stats import randint, uniform
+from sklearn.compose import ColumnTransformer
+from sklearn.compose import make_column_selector as selector
+from sklearn.decomposition import PCA
+from sklearn.feature_selection import SelectKBest
+from sklearn.impute import SimpleImputer
 from sklearn.metrics import make_scorer
 from sklearn.model_selection import RandomizedSearchCV, RepeatedKFold
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer, MinMaxScaler, StandardScaler
+from sklearn.utils import estimator_html_repr
 from sklearn.utils.validation import check_is_fitted
 from sksurv.ensemble import GradientBoostingSurvivalAnalysis
+from sksurv.linear_model import CoxPHSurvivalAnalysis
 from sksurv.metrics import concordance_index_censored
 from xgbse import XGBSEStackedWeibull
 from xgbse.converters import convert_y
 from xgbse.metrics import concordance_index
 
-from pipeline import EarlyStoppingMonitor, create_pipeline, create_pipeline_with_pca
+from pipeline import EarlyStoppingMonitor
 from xgboost_wrapper import XGBSurvival
 
 
@@ -31,9 +39,12 @@ def score(self, X, y):
 
 
 class candidate_model:
-    def __init__(self):
+    def __init__(self, with_pca, n_components):
         self.estimator = None
-
+        self.with_pca = with_pca
+        self.n_components = n_components
+        self.model = None
+        
     def fit(self, X_train, y_train):
         print("Model training...")
         self.estimator.fit(X_train, y_train)
@@ -44,8 +55,8 @@ class candidate_model:
         predictions = self.estimator.predict(X_test)
         return predictions
 
-    def model_pipeline(self, X_train, y_train):
-        self = self.cross_validation(X_train, y_train)
+    def model_pipeline(self, X_train, y_train, n_iter):
+        self = self.cross_validation(X_train, y_train, n_iter)
         self = self.fit(X_train, y_train)
         return self
         
@@ -65,28 +76,62 @@ class candidate_model:
             #The range of this number has to be between 0 and 1, with larger numbers being associated with higher probability of having HF. The values, -Inf, Inf and NA, are not allowed. 
         return risk_score.to_numpy().flatten()
 
-    def cross_validation(self, X_train, y_train):
+    def cross_validation(self, X_train, y_train, n_iter):
         return self
 
     def evaluate(self, X_train, X_test, y_train, y_test):
-        score_training = self.estimator.score(X_train, y_train)
-        score_test = self.estimator.score(X_test, y_test)
-        return score_training, score_test
+        self.harrell_C_training = self.estimator.score(X_train, y_train)
+        self.harrell_C_test = self.estimator.score(X_test, y_test)
+        return self
 
+    def create_pipeline(self):
+        numeric_transformer = Pipeline(
+            steps=[
+                ("imputer", SimpleImputer(strategy="mean")),
+                ("scaler", StandardScaler()),
+            ]
+        )
+
+        categorical_transformer = Pipeline(
+            steps=[
+                ("imputer", SimpleImputer(strategy="most_frequent")),
+            ]
+        )
+
+        if self.with_pca:
+            pca = PCA(self.n_components)
+            pca_transformer = ColumnTransformer(
+                transformers=[("pca", pca, selector(pattern="k__"))], remainder='passthrough')
+
+        preprocessor = ColumnTransformer(
+            transformers=[
+                ("num", numeric_transformer, selector(
+                    dtype_exclude=["bool", "category", "Int64"])),
+                ("cat", categorical_transformer, selector(
+                    dtype_include=["bool", "category", "Int64"])),
+            ]
+        )
+
+        if self.with_pca:
+            regressor = Pipeline(
+                steps=[("preprocessor", preprocessor), ("pca", pca_transformer), ("model", self.model)])
+        else:
+            regressor = Pipeline(
+                steps=[("preprocessor", preprocessor), ("model", self.model)])
+
+        with open("regressor.html", "w") as f:
+            f.write(estimator_html_repr(regressor))
+        return regressor
 
 class sksurv_gbt(candidate_model):
-    def __init__(self, with_pca = False):
-        super().__init__()
+    def __init__(self, with_pca, n_components):
+        super().__init__(with_pca, n_components)
         self.monitor = EarlyStoppingMonitor(25, 50)
         
-        
-        self.with_pca = with_pca
         self.model = GradientBoostingSurvivalAnalysis()
-        if with_pca : 
-            self.estimator = create_pipeline_with_pca(self.model)    
-        else:
-            self.estimator = create_pipeline(self.model)
         
+        self.estimator = self.create_pipeline()
+                
         self.estimator.fit = lambda X_train, y_train: self.estimator.fit(
             X_train, y_train, model__monitor=self.monitor
         )
@@ -103,12 +148,46 @@ class sksurv_gbt(candidate_model):
             model__dropout_rate=uniform(loc=0, scale=1),
         )
 
-    def cross_validation(self, X_train, y_train):
+    def cross_validation(self, X_train, y_train, n_iter):
         randsearchcv = RandomizedSearchCV(
             self.estimator,
             self.distributions,
             random_state=0,
-            n_iter=4,
+            n_iter=n_iter,
+            n_jobs=-1,
+            verbose=2,
+            #error_score='raise',
+        )
+        search = randsearchcv.fit(X_train, y_train)
+        self.estimator = search.best_estimator_
+        return self
+
+
+class CoxPH(candidate_model):
+    def __init__(self, with_pca, n_components):
+        super().__init__(with_pca, n_components)
+        self.monitor = EarlyStoppingMonitor(25, 50)
+
+        self.model = CoxPHSurvivalAnalysis(
+            ties='breslow', tol=1e-09, verbose=0)
+
+        self.estimator = self.create_pipeline()
+
+        self.estimator.fit = lambda X_train, y_train: self.estimator.fit(
+            X_train, y_train, model__monitor=self.monitor
+        )
+
+        self.distributions = dict(
+            model__alpha=uniform(loc=0, scale=1),
+            model__n_iter=randint(80, 200)
+        )
+
+    def cross_validation(self, X_train, y_train, n_iter):
+        randsearchcv = RandomizedSearchCV(
+            self.estimator,
+            self.distributions,
+            random_state=0,
+            n_iter=n_iter,
             n_jobs=-1,
             verbose=2,
             #error_score='raise',
@@ -133,8 +212,8 @@ class sklearn_wei(XGBSEStackedWeibull):
 
 
 class xgbse_weibull(candidate_model):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, with_pca = False, n_components = None):
+        super().__init__(with_pca, n_components)
         xgb_params = {
             "aft_loss_distribution": "normal",
             "aft_loss_distribution_scale": 1,
@@ -154,8 +233,9 @@ class xgbse_weibull(candidate_model):
 
         self.model.score = bind(self, score)
 
-        self.estimator = create_pipeline(
-            self.model)
+        self.with_pca = with_pca
+        self.n_components = n_components
+        self.estimator = self.create_pipeline()
 
         self.distributions = dict(
             model__aft_loss_distribution_scale=uniform(loc=0, scale=1),
@@ -167,13 +247,13 @@ class xgbse_weibull(candidate_model):
             model__tree_method=["hist"],
         )
 
-    def cross_validation(self, X_train, y_train):
+    def cross_validation(self, X_train, y_train, n_iter):
         randsearchcv = RandomizedSearchCV(
             estimator=self.estimator,
             param_distributions=self.distributions,
             scoring=make_scorer(concordance_index),
             random_state=0,
-            n_iter=3,  # 300
+            n_iter=n_iter,  # 300
             n_jobs=-1,
             verbose=2,
         )
@@ -183,8 +263,8 @@ class xgbse_weibull(candidate_model):
 
 
 class xgb_aft(candidate_model):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, with_pca = False, n_components = None):
+        super().__init__(with_pca, n_components)
         self.params = {
             "aft_loss_distribution": "normal",
             "aft_loss_distribution_scale": 1,
@@ -199,12 +279,12 @@ class xgb_aft(candidate_model):
             "tree_method": "hist",
         }
         self.model = XGBSurvival(self.params)
-        self.estimator = create_pipeline(self.model)
+        self.estimator = self.create_pipeline()
 
 
 class xgb_optuna(candidate_model):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, with_pca = False, n_components = None):
+        super().__init__(with_pca, n_components)
         # repeated K-folds
         self.N_SPLITS = 3
         self.N_REPEATS = 1
@@ -237,7 +317,7 @@ class xgb_optuna(candidate_model):
         }
 
         self.model = XGBSurvival(self.base_params, num_boost_round=10000)
-        self.estimator = create_pipeline(self.model)
+        self.estimator = self.create_pipeline()
 
     def cross_validation(self, X_train, y_train):
 
@@ -286,8 +366,8 @@ class xgb_optuna(candidate_model):
             "gamma": trial.suggest_float("lambda", 1e-8, 10.0, log=True),
         }
 
-        model = XGBSurvival(xgb_params, num_boost_round=10000)
-        estimator = create_pipeline(model)
+        self.model = XGBSurvival(xgb_params, num_boost_round=10000)
+        self.estimator = self.create_pipeline()
 
         rkf = RepeatedKFold(
             n_splits=n_splits, n_repeats=n_repeats, random_state=random_state
@@ -299,13 +379,13 @@ class xgb_optuna(candidate_model):
                               :], X.iloc[test_index, :]
             y_A, y_B = y[train_index], y[test_index]
 
-            if not check_is_fitted(estimator):
-                estimator[:-1].fit(X_A, y_A)
+            if not check_is_fitted(self.estimator):
+                self.estimator[:-1].fit(X_A, y_A)
 
-            X_B_transformed = estimator.named_steps['preprocessor'].transform(
+            X_B_transformed = self.estimator.named_steps['preprocessor'].transform(
                 X_B)
 
-            estimator.fit(
+            self.estimator.fit(
                 X_A,
                 y_A,
                 model__validation_data=(X_B_transformed, y_B),
@@ -313,7 +393,7 @@ class xgb_optuna(candidate_model):
                 model__early_stopping_rounds=early_stopping_rounds,
             )
 
-            score += estimator.score(X_B, y_B)
+            score += self.estimator.score(X_B, y_B)
         score /= n_repeats
         return score
 
