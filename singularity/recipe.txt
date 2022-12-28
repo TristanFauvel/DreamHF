@@ -15,14 +15,18 @@ FROM: python:3.8.13
     	
 %post
 ## Install the required python packages
+	pip install --upgrade pip
 	pip install numpy==1.23.4
 	pip install pandas==1.5.1
 	pip install python-dotenv==0.21.0
 	pip install scikit_bio==0.5.7
-	pip install scikit_learn==1.1.3
 	pip install scikit_survival==0.19.0.post1
 	pip install scipy==1.8.1
-    pip install xgbse==0.2.3
+    	pip install xgbse==0.2.3
+    	pip install optuna
+    	pip install scikit_learn==1.2.0
+    	pip install wandb
+    	pip list
 	
 %runscript
 	if [ $# -ne 1 ]; then

@@ -4,11 +4,12 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 import sklearn
+from skbio.diversity import alpha_diversity, beta_diversity
 from skbio.stats.composition import clr, multiplicative_replacement
 from sklearn.feature_selection import SelectKBest
 
 CLINICAL_COVARIATES = ['Age', 'BodyMassIndex', 'Smoking', 'BPTreatment', 'PrevalentDiabetes',
-       'PrevalentCHD', 'PrevalentHFAIL', 'Event', 'Event_time', 'SystolicBP',
+       'PrevalentCHD', 'PrevalentHFAIL', 'SystolicBP',
        'NonHDLcholesterol', 'Sex']
 
 
@@ -91,9 +92,20 @@ def load_data(root):
     pheno_df_test = pheno_df_test.loc[idx_test, :]
     pheno_df_train = pheno_df_train.loc[idx_train, :]
 
+    readcounts_df_train = remove_invalid_characters(readcounts_df_train)
+    readcounts_df_test = remove_invalid_characters(readcounts_df_test)     
+    
     return pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test
 
-
+def remove_invalid_characters(df):
+    # To avoid the ValueError: feature_names must be string, and may not contain[, ] or < when using XGBoost
+    #df.columns = df.columns.str.replace(
+    #    r"[[]><]", "")
+    invalid_characters = ['[',']','>','<']
+    for c in invalid_characters:
+        df.columns = [col.replace(c, '') for col in df.columns] 
+    return df
+    
 def _prepare_train_test(df_train: pd.DataFrame, df_test: pd.DataFrame, covariates):
     # Left truncation : we remove all participants who experienced HF before entering the study.
     selection_train = df_train.loc[:, "Event_time"] >= -np.inf  # 0
@@ -198,20 +210,12 @@ def Salosensaari_processing(
 
 def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates, n_taxa):      
     
-    select_taxa= True
-    while select_taxa:
-        if n_taxa > 0:
-            taxa = taxa_selection(pheno_df_train, readcounts_df_train, n_taxa)
-        else :
-            taxa= None
-            
-        if all(readcounts_df_train.loc[:, taxa].sum(axis=1) > 0):
-            select_taxa = False
-        else:
-            # _centered_log_transform does not work otherwise (ValueError: Input matrix cannot have rows with all zeros)
-            n_taxa = n_taxa + 1
+    if n_taxa > 0:
+        taxa = taxa_selection(pheno_df_train, readcounts_df_train, n_taxa)
+    else :
+        taxa= None  
            
-    if np.setdiff1d(clinical_covariates, CLINICAL_COVARIATES):
+    if any(np.setdiff1d(clinical_covariates, CLINICAL_COVARIATES)):
         raise(ValueError('One of the clinical covariates is not in the prespecified list'))
     
     pheno_df_train = pheno_df_train.loc[:, list(clinical_covariates)+
@@ -219,16 +223,26 @@ def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcount
     pheno_df_test = pheno_df_test.loc[:, list(clinical_covariates)+
         ["Event", "Event_time"]]
     
+    
+    adiv_train = diversity_metrics(readcounts_df_train, 'observed_otus')
+    adiv_test = diversity_metrics(readcounts_df_test, 'observed_otus')
+    shannon_train = diversity_metrics(readcounts_df_train, 'shannon')
+    shannon_test = diversity_metrics(readcounts_df_test, 'shannon')
+    
     if taxa is None:
         df_train = pheno_df_train
         df_test = pheno_df_test
     else:
-        df_clr_train = _centered_log_transform(readcounts_df_train.loc[:,taxa])
-        df_clr_test = _centered_log_transform(readcounts_df_test.loc[:,taxa])
+        df_clr_train = _centered_log_transform(readcounts_df_train)
+        df_clr_test = _centered_log_transform(readcounts_df_test)
        
-        df_train = pheno_df_train.join(df_clr_train)
-        df_test = pheno_df_test.join(df_clr_test)  
-    
+        df_train = pheno_df_train.join(df_clr_train.loc[:,taxa])
+        df_test = pheno_df_test.join(df_clr_test.loc[:,taxa])  
+        df_train['adiv'] = adiv_train
+        df_test['adiv'] = adiv_test
+        df_train['shannon'] = shannon_train
+        df_test['shannon'] = shannon_test
+        
     covariates = df_train.loc[
             :, (df_train.columns != "Event") & (df_train.columns != "Event_time")
         ].columns
@@ -240,7 +254,7 @@ def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcount
 
 def standard_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates, taxa = None):      
     
-    if np.setdiff1d(clinical_covariates, CLINICAL_COVARIATES):
+    if any(np.setdiff1d(clinical_covariates, CLINICAL_COVARIATES)):
         raise(ValueError('One of the clinical covariates is not in the prespecified list'))
     
     pheno_df_train = pheno_df_train.loc[:, list(clinical_covariates)+
@@ -278,4 +292,10 @@ def taxa_selection(pheno_df_train, readcounts_df_train, n_taxa = 200):
 
     kbest.fit(presence_df, event_df)
     return kbest.get_feature_names_out()
-# %%
+
+
+def diversity_metrics(readcounts_df, metric):
+    X= readcounts_df.to_numpy()
+    ids = readcounts_df.index
+    adiv= alpha_diversity(metric, X, ids).to_numpy().reshape(-1,1) 
+    return adiv

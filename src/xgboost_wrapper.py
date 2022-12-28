@@ -1,5 +1,6 @@
 import pandas as pd
 import xgboost as xgb
+from sklearn.preprocessing import MinMaxScaler
 from sksurv.metrics import concordance_index_censored
 from xgbse.converters import convert_data_to_xgb_format, convert_y
 
@@ -43,8 +44,8 @@ class XGBSurvival(xgb.Booster):
 
     def fit(
         self,
-        X,
-        y,
+        X_train,
+        y_train,
         validation_data=None,
         early_stopping_rounds=None,
         verbose_eval=0,
@@ -52,7 +53,8 @@ class XGBSurvival(xgb.Booster):
     ):
 
         # converting data to xgb format
-        dtrain = convert_data_to_xgb_format(X, y, self.xgb_params["objective"])
+        dtrain = convert_data_to_xgb_format(
+            X_train, y_train, self.xgb_params["objective"])
 
         # converting validation data to xgb format
         evals = ()
@@ -93,3 +95,5 @@ class XGBSurvival(xgb.Booster):
         # that the model can order correctly in terms of survival times.
 
         return concordance_index_censored(event, time, risk_score)[0]
+
+    

@@ -32,15 +32,17 @@ def _newickify(node_to_children, root_node) -> str:
 
     return newick_string
 
-def newickify_taxonomy():
+def process_taxonomy():
     load_dotenv()
     root = os.environ.get("root_folder")
 
-    tax_train= pd.read_csv(root + '/train/taxtable.csv')
-
-
+    tax_train = pd.read_csv(root + '/train/taxtable.csv')
     # %%
     df = tax_train
+    taxonomy_newick = newickify_taxonomy(df)
+    return taxonomy_newick
+    
+def newickify_taxonomy(df):       
     df.insert(0, "root", ["root"]*df.shape[0], True)
 
     # Convert a dataframe into tree-like dictionary
@@ -92,3 +94,7 @@ def get_taxa_list():
         taxa.append(row_content)
     taxa = np.array(taxa)
     return taxa
+
+def convert_to_taxtable(input):
+    df = pd.DataFrame([sub.split(";") for sub in input], columns= ['Domain','Phylum','Class','Order','Family','Genus','Species'])
+    return df

@@ -5,17 +5,22 @@ import pathlib
 import numpy as np
 import pandas as pd
 import sklearn
-from sklearn.compose import ColumnTransformer
-from sklearn.compose import make_column_selector as selector
-from sklearn.decomposition import PCA
-from sklearn.feature_selection import SelectKBest
-from sklearn.impute import SimpleImputer
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import FunctionTransformer, StandardScaler
-from sklearn.utils import estimator_html_repr
+from sksurv.metrics import concordance_index_censored
+
+import wandb
+from model_evaluation import evaluate_model
+from preprocessing import CLINICAL_COVARIATES, Salosensaari_processing, clr_processing
+from survival_models import (
+    Coxnet,
+    CoxPH,
+    IPCRidge_sksurv,
+    sksurv_gbt,
+    xgb_aft,
+    xgb_optuna,
+    xgbse_weibull,
+)
 
 sklearn.set_config(transform_output="pandas")
-
 
 def postprocessing(preds_test, test_sample_ids, root):
     # Check that the predictions do not contain NaN, +inf or -inf
@@ -32,31 +37,108 @@ def postprocessing(preds_test, test_sample_ids, root):
     results.to_csv(outdir + "scores.csv")
 
 
-class EarlyStoppingMonitor:
-    def __init__(self, window_size, max_iter_without_improvement):
-        self.window_size = window_size
-        self.max_iter_without_improvement = max_iter_without_improvement
-        self._best_step = -1
+def experiment_pipeline(pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, ROOT):
 
-    def __call__(self, iteration, estimator, args):
-        # continue training for first self.window_size iterations
-        if iteration < self.window_size:
-            return False
+    processing = 'MI_clr'
+    clinical_covariates=CLINICAL_COVARIATES
+    n_taxa = 50
+    
+    if processing == 'Salosensaari':
+        X_train, X_test, y_train, y_test, test_sample_ids = Salosensaari_processing(
+            pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates
+        )
+    elif processing == 'MI_clr':
+        ## Feature selection
+        X_train, X_test, y_train, y_test, test_sample_ids = clr_processing(
+            pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates,  n_taxa)
 
-        # compute average improvement in last self.window_size iterations.
-        # oob_improvement_ is the different in negative log partial likelihood
-        # between the previous and current iteration.
-        start = iteration - self.window_size + 1
-        end = iteration + 1
-        improvement = np.mean(estimator.oob_improvement_[start:end])
+    #%%
+    candidate_models = ['Coxnet', 'sksurv_gbt',
+                        'xgb_aft', 'xgb_optuna', 'CoxPH']
 
-        if improvement > 1e-6:
-            self._best_step = iteration
-            return False  # continue fitting
+    best_perf = 0
+    best_model = None
 
-        # stop fitting if there was no improvement
-        # in last max_iter_without_improvement iterations
-        diff = iteration - self._best_step
-        return diff >= self.max_iter_without_improvement
+    for model_name in candidate_models:
+        model = run_experiment(model_name, 1, X_train, X_test, y_train, y_test, test_sample_ids, ROOT)
+        if model.harrell_C_test > best_perf:
+            best_perf = model.harrell_C_test
+            best_model = model_name
+            # save the model to disk
+            #filename = 'trained_model.sav'
+            #pickle.dump(model, open(filename, 'wb'))
+        preds_train = model.risk_score(X_train)
+        preds_test = model.risk_score(X_test)
+        event_field, time_field = y_train.dtype.names
+        concordance_index_censored_train = concordance_index_censored(
+            y_train[event_field], y_train[time_field], preds_train
+        )
+        concordance_index_censored_test = concordance_index_censored(
+            y_test[event_field], y_test[time_field], preds_test
+        )
+
+        print(concordance_index_censored_train)
+        print(concordance_index_censored_test)
+
+    model = run_experiment(best_model, 5, X_train, X_test, y_train, y_test, test_sample_ids, ROOT)
+    # %%
+    print("Task completed.")
+    return
 
 
+def run_experiment(model_name, n_iter, X_train, X_test, y_train, y_test, test_sample_ids, ROOT):
+
+    config = dict(
+        with_pca=False,
+        n_components=None,
+        # xgbse_weibull, sksurv_gbt, xgb_aft, xgb_optuna, CoxPH
+        #  xgbse_weibull : not ok
+        # Coxnet : ok, IPCRidge_sksurv
+        #  CoxPH : ok, sksurv_gbt : ok, xgb_aft: ok, but severe overfitting (0.9676036909132226, 0.6376541333063073)
+        model_name=model_name, 
+        n_iter=n_iter,
+        n_taxa=30
+    )
+
+    run = wandb.init(
+        project="Dream-Challenge",
+        name=config['model_name'],
+        notes="Compare models",
+        tags=["baseline"],
+        config=config,
+        mode="disabled"  # disabled
+    )
+
+    # Load the data
+    os.environ["root_folder"] = ROOT
+
+    print("Processing the data...")
+
+    wandb_config = wandb.config 
+
+    
+    model = eval(wandb_config.model_name +
+                 f'(with_pca = {wandb_config.with_pca}, n_components = {wandb_config.n_components})')
+
+    # %%
+    print("Search for optimal hyperparameters...")
+    model = model.model_pipeline(X_train, y_train, wandb_config.n_iter)
+
+    #%%
+    model = model.evaluate(X_train, X_test, y_train, y_test)
+    print(model.harrell_C_training)
+    print(model.harrell_C_test)
+    #%%
+    wandb.log({'Harrel C - training':  model.harrell_C_training,
+               'Harrel C - test':  model.harrell_C_test,
+               'config':  config})
+    #'HL - training': self.HL_training,
+    #'HL - test': self.HL_test})
+
+    wandb.run.summary['Harrel C - training'] = model.harrell_C_training
+    wandb.run.summary['Harrel C - test'] = model.harrell_C_test
+
+    preds_test = model.risk_score(X_test)
+    postprocessing(preds_test, test_sample_ids, ROOT)
+    run.finish()
+    return model

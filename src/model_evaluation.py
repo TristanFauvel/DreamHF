@@ -1,5 +1,5 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 import xgboost as xgb
 from sksurv.metrics import (
     concordance_index_censored,
@@ -10,6 +10,7 @@ from sksurv.metrics import (
 
 from HosmerLemeshowSurvival import HosmerLemeshowSurvival
 from xgboost_wrapper import XGBSurvival
+
 
 def evaluate_model(model, X_train, X_test, y_train, y_test):
     preds_train = model.predict(X_train)
@@ -51,9 +52,12 @@ def evaluate_model(model, X_train, X_test, y_train, y_test):
     concordance_index_ipcw_test = concordance_index_ipcw(
         y_train, y_test, preds_test, tau=tau
     )
+    integrated_brier_score_train = np.nan
+    integrated_brier_score_test = np.nan
 
     if not isinstance(model, XGBSurvival):
         #%% Integrated Brier score
+        
         try:
             survs = model.predict_survival_function(X_train)
             preds = np.asarray([[fn(t) for t in times] for fn in survs])
@@ -74,7 +78,7 @@ def evaluate_model(model, X_train, X_test, y_train, y_test):
 
         HL_train = HosmerLemeshowSurvival(10, model, X_train, y_train, df=2, Q=10)
         HL_test = HosmerLemeshowSurvival(10, model, X_test, y_test, df=2, Q=10)
-
+    
         result = {
             "Harrell C": [
                 concordance_index_censored_train[0],
