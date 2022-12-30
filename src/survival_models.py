@@ -185,7 +185,7 @@ class sksurv_gbt(candidate_model):
         )
 
         self.distributions = dict(
-            model__learning_rate=uniform(loc=0, scale=0.4),
+            model__learning_rate=uniform(loc=1e-2, scale=0.4),
             model__max_depth=randint(2, 6),
             model__loss=["coxph"],
             model__n_estimators=randint(100, 350),
@@ -498,4 +498,121 @@ class xgb_optuna(candidate_model):
 
     def risk_score(self, X_test):
         risk_score =  xgb_risk_score(self, X_test)
+        return risk_score
+    
+    
+class sksurv_gbt_optuna(candidate_model):
+    def __init__(self, with_pca, n_components):
+        super().__init__(with_pca, n_components)
+        # repeated K-folds
+        self.N_SPLITS = 3
+        self.N_REPEATS = 1
+
+        # Optuna
+        self.RS = 124  # random state
+        # XGBoost
+        self.EARLY_STOPPING_ROUNDS = 50
+        self.MULTIVARIATE = True
+
+        self.N_JOBS = -1  # number of parallel threads
+
+        self.sampler = TPESampler(seed=self.RS, multivariate=self.MULTIVARIATE)
+        
+        
+        self.monitor = EarlyStoppingMonitor(25, 50)
+        
+        self.model = GradientBoostingSurvivalAnalysis()
+        
+        self.estimator = self.create_pipeline()
+                
+        self.estimator.fit = lambda X_train, y_train: self.estimator.fit(
+            X_train, y_train, model__monitor=self.monitor
+        )
+        
+    def cross_validation(self, X_train, y_train, n_iter):
+        self.N_TRIALS = n_iter
+
+        study = create_study(direction="maximize", sampler=self.sampler)
+        study.optimize(
+            lambda trial: self.objective(
+                trial,
+                X_train,
+                y_train,
+                random_state=self.RS,
+                n_splits=self.N_SPLITS,
+                n_repeats=self.N_REPEATS,
+                n_jobs=-1,
+                early_stopping_rounds=self.EARLY_STOPPING_ROUNDS,
+            ),
+            n_trials=self.N_TRIALS,
+            n_jobs=-1,
+        )
+        self.optimal_hp = study.best_params
+        self = self.fit(X_train, y_train)
+        return self
+
+    def objective(
+        self,
+        trial,
+        X_train,
+        y_train,
+        random_state=22,
+        n_splits=3,
+        n_repeats=2,
+        n_jobs=-1,
+        early_stopping_rounds=50,
+    ):
+        # XGBoost parameters
+
+        xgb_params = {
+            "learning_rate": trial.suggest_float("learning_rate", 1e-2, 0.4, log=False),
+            "max_depth": trial.suggest_int("max_depth", 2, 6),
+            "loss": "coxph",
+            "n_estimators": trial.suggest_int("n_estimators", 100, 350),
+            "min_samples_split":  trial.suggest_int("min_samples_split", 2, 6),
+            "min_samples_leaf":  trial.suggest_int("min_samples_leaf", 1, 10),
+            "subsample": trial.suggest_float("subsample", 0.4, 0.8, log=False),
+            "max_leaf_nodes": trial.suggest_int("max_leaf_nodes", 2, 30),
+            "dropout_rate": trial.suggest_float("dropout_rate", 0, 1, log=False),
+        }
+        
+        self, score = self.fit(X_train, y_train, with_score=True)
+        return score
+
+    def fit(self, X_train, y_train, with_score=False):
+        n_splits = self.N_SPLITS
+        n_repeats = self.N_REPEATS
+        rkf = RepeatedKFold(
+            n_splits=n_splits, n_repeats=n_repeats, random_state=0
+        )
+        self.estimator.fit(X_train, y_train)
+
+        score = 0
+        for train_index, test_index in rkf.split(X_train):
+            X_A, X_B = X_train.iloc[train_index,
+                                    :], X_train.iloc[test_index, :]
+            y_A, y_B = y_train[train_index], y_train[test_index]
+
+            if not check_is_fitted(self.estimator):
+                self.estimator[:-1].fit(X_A, y_A)
+
+            X_B_transformed = self.estimator.named_steps['preprocessor'].transform(
+                X_B)
+
+            self.estimator.fit(
+                X_A,
+                y_A,
+                model__validation_data=(X_B_transformed, y_B),
+                model__verbose_eval=0,
+                model__early_stopping_rounds=self.EARLY_STOPPING_ROUNDS,
+            )
+            score += self.estimator.score(X_B, y_B)
+        score /= n_repeats
+        if with_score:
+            return self, score
+        else:
+            return self
+
+    def risk_score(self, X_test):
+        risk_score = xgb_risk_score(self, X_test)
         return risk_score

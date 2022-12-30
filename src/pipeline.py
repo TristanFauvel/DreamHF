@@ -15,6 +15,7 @@ from survival_models import (
     CoxPH,
     IPCRidge_sksurv,
     sksurv_gbt,
+    sksurv_gbt_optuna,
     xgb_aft,
     xgb_optuna,
     xgbse_weibull,
@@ -53,34 +54,24 @@ def experiment_pipeline(pheno_df_train, pheno_df_test, readcounts_df_train, read
             pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates,  n_taxa)
 
     #%%
+    """
     candidate_models = ['Coxnet', 'sksurv_gbt',
-                        'xgb_aft', 'xgb_optuna', 'CoxPH']
+                        'xgb_optuna', 'CoxPH']
 
     best_perf = 0
     best_model = None
 
     for model_name in candidate_models:
-        model = run_experiment(model_name, 1, X_train, X_test, y_train, y_test, test_sample_ids, ROOT)
+        model = run_experiment(model_name, 50, X_train, X_test, y_train, y_test, test_sample_ids, ROOT)
         if model.harrell_C_test > best_perf:
             best_perf = model.harrell_C_test
             best_model = model_name
             # save the model to disk
             #filename = 'trained_model.sav'
             #pickle.dump(model, open(filename, 'wb'))
-        preds_train = model.risk_score(X_train)
-        preds_test = model.risk_score(X_test)
-        event_field, time_field = y_train.dtype.names
-        concordance_index_censored_train = concordance_index_censored(
-            y_train[event_field], y_train[time_field], preds_train
-        )
-        concordance_index_censored_test = concordance_index_censored(
-            y_test[event_field], y_test[time_field], preds_test
-        )
-
-        print(concordance_index_censored_train)
-        print(concordance_index_censored_test)
-
-    model = run_experiment(best_model, 5, X_train, X_test, y_train, y_test, test_sample_ids, ROOT)
+    """
+    best_model = 'sksurv_gbt'
+    model = run_experiment(best_model, 100, X_train, X_test, y_train, y_test, test_sample_ids, ROOT)
     # %%
     print("Task completed.")
     return
@@ -90,14 +81,12 @@ def run_experiment(model_name, n_iter, X_train, X_test, y_train, y_test, test_sa
 
     config = dict(
         with_pca=False,
-        n_components=None,
         # xgbse_weibull, sksurv_gbt, xgb_aft, xgb_optuna, CoxPH
         #  xgbse_weibull : not ok
         # Coxnet : ok, IPCRidge_sksurv
         #  CoxPH : ok, sksurv_gbt : ok, xgb_aft: ok, but severe overfitting (0.9676036909132226, 0.6376541333063073)
         model_name=model_name, 
         n_iter=n_iter,
-        n_taxa=30
     )
 
     run = wandb.init(
@@ -117,8 +106,9 @@ def run_experiment(model_name, n_iter, X_train, X_test, y_train, y_test, test_sa
     wandb_config = wandb.config 
 
     
-    model = eval(wandb_config.model_name +
-                 f'(with_pca = {wandb_config.with_pca}, n_components = {wandb_config.n_components})')
+    #model = eval(wandb_config.model_name +                  f'(with_pca = {wandb_config.with_pca}, n_components = {wandb_config.n_components})')
+
+    model = eval(wandb_config.model_name)
 
     # %%
     print("Search for optimal hyperparameters...")
@@ -126,8 +116,7 @@ def run_experiment(model_name, n_iter, X_train, X_test, y_train, y_test, test_sa
 
     #%%
     model = model.evaluate(X_train, X_test, y_train, y_test)
-    print(model.harrell_C_training)
-    print(model.harrell_C_test)
+    
     #%%
     wandb.log({'Harrel C - training':  model.harrell_C_training,
                'Harrel C - test':  model.harrell_C_test,
@@ -142,3 +131,5 @@ def run_experiment(model_name, n_iter, X_train, X_test, y_train, y_test, test_sa
     postprocessing(preds_test, test_sample_ids, ROOT)
     run.finish()
     return model
+
+# %%
