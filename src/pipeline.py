@@ -71,7 +71,7 @@ def experiment_pipeline(pheno_df_train, pheno_df_test, readcounts_df_train, read
             #pickle.dump(model, open(filename, 'wb'))
     """
     best_model = 'sksurv_gbt'
-    model = run_experiment(best_model, 100, X_train, X_test, y_train, y_test, test_sample_ids, ROOT)
+    model = run_experiment(best_model, 10, X_train, X_test, y_train, y_test, test_sample_ids, ROOT)
     # %%
     print("Task completed.")
     return

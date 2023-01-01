@@ -97,10 +97,8 @@ def xgb_risk_score(self, X_test):  # OK for models in sksurv which predict the r
     
     
 class candidate_model:
-    def __init__(self, with_pca, n_components):
+    def __init__(self):
         self.estimator = None
-        self.with_pca = with_pca
-        self.n_components = n_components
         self.model = None
         
     def fit(self, X_train, y_train):
@@ -131,6 +129,24 @@ class candidate_model:
             y_test['Event'], y_test['Event_time'], self.risk_score(X_test))[0]
 
         return self
+    
+    def objective(trial):
+        with_pca = trial.suggest_categorical("with_pca", [True, False])
+
+        if with_pca:
+            pca_n_components = trial.suggest_int(
+                "pca_n_components", 2, 30)  # suggest an integer from 2 to 30
+            dimen_red_algorithm = PCA(n_components=pca_n_components)
+        else:
+            dimen_red_algorithm = 'passthrough'
+            
+        score = cross_val_score(pipeline, X, y, scoring='f1')
+        f1 = score.mean()  # calculate the mean of scores
+        return f1
+
+    # maximise the score during tuning
+    #study = optuna.create_study(direction="maximize")
+    #study.optimize(objective, n_trials=100)  # run the objective function 100 times
 
     def create_pipeline(self):
         numeric_transformer = Pipeline(
@@ -170,9 +186,8 @@ class candidate_model:
         with open("regressor.html", "w") as f:
             f.write(estimator_html_repr(regressor))
         return regressor
-
 class sksurv_gbt(candidate_model):
-    def __init__(self, with_pca, n_components):
+    def __init__(self):
         super().__init__(with_pca, n_components)
         self.monitor = EarlyStoppingMonitor(25, 50)
         
@@ -206,7 +221,7 @@ class sksurv_gbt(candidate_model):
      
 
 class CoxPH(candidate_model):
-    def __init__(self, with_pca, n_components):
+    def __init__(self):
         super().__init__(with_pca, n_components)
         self.monitor = EarlyStoppingMonitor(25, 50)
 
@@ -233,7 +248,7 @@ class CoxPH(candidate_model):
         return risk_score
 
 class IPCRidge_sksurv(candidate_model):
-    def __init__(self, with_pca, n_components):
+    def __init__(self):
         super().__init__(with_pca, n_components)
         self.monitor = EarlyStoppingMonitor(25, 50)
 
@@ -259,7 +274,7 @@ class IPCRidge_sksurv(candidate_model):
     
 
 class Coxnet(candidate_model):
-    def __init__(self, with_pca, n_components):
+    def __init__(self):
         super().__init__(with_pca, n_components)
         self.monitor = EarlyStoppingMonitor(25, 50)
 
@@ -502,7 +517,7 @@ class xgb_optuna(candidate_model):
     
     
 class sksurv_gbt_optuna(candidate_model):
-    def __init__(self, with_pca, n_components):
+    def __init__(self):
         super().__init__(with_pca, n_components)
         # repeated K-folds
         self.N_SPLITS = 3
