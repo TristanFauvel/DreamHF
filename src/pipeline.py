@@ -16,7 +16,6 @@ from survival_models import (
     IPCRidge_sksurv,
     sksurv_gbt,
     sksurv_gbt_optuna,
-    xgb_aft,
     xgb_optuna,
     xgbse_weibull,
 )
@@ -71,13 +70,13 @@ def experiment_pipeline(pheno_df_train, pheno_df_test, readcounts_df_train, read
             #pickle.dump(model, open(filename, 'wb'))
     """
     best_model = 'sksurv_gbt'
-    model = run_experiment(best_model, 10, X_train, X_test, y_train, y_test, test_sample_ids, ROOT)
+    model = run_experiment(best_model, 600, X_train, X_test, y_train, test_sample_ids, ROOT)
     # %%
     print("Task completed.")
     return
 
 
-def run_experiment(model_name, n_iter, X_train, X_test, y_train, y_test, test_sample_ids, ROOT):
+def run_experiment(model_name, n_iter, X_train, X_test, y_train, test_sample_ids, ROOT):
 
     config = dict(
         with_pca=False,
@@ -108,24 +107,11 @@ def run_experiment(model_name, n_iter, X_train, X_test, y_train, y_test, test_sa
     
     #model = eval(wandb_config.model_name +                  f'(with_pca = {wandb_config.with_pca}, n_components = {wandb_config.n_components})')
 
-    model = eval(wandb_config.model_name)
+    model = eval(wandb_config.model_name + '()')
 
     # %%
     print("Search for optimal hyperparameters...")
-    model = model.model_pipeline(X_train, y_train, wandb_config.n_iter)
-
-    #%%
-    model = model.evaluate(X_train, X_test, y_train, y_test)
-    
-    #%%
-    wandb.log({'Harrel C - training':  model.harrell_C_training,
-               'Harrel C - test':  model.harrell_C_test,
-               'config':  config})
-    #'HL - training': self.HL_training,
-    #'HL - test': self.HL_test})
-
-    wandb.run.summary['Harrel C - training'] = model.harrell_C_training
-    wandb.run.summary['Harrel C - test'] = model.harrell_C_test
+    model = model.cross_validation(X_train, y_train, n_iter)
 
     preds_test = model.risk_score(X_test)
     postprocessing(preds_test, test_sample_ids, ROOT)

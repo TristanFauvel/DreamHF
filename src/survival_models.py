@@ -67,6 +67,18 @@ def score(self, X, y):
     return concordance_index_censored(event, time, risk_score)[0]
 """
 def sksurv_cross_validation(model, X_train, y_train, n_iter):
+    
+        randsearchcv = RandomizedSearchCV(
+                model,
+                model.distributions,
+                random_state=0,
+                n_iter=n_iter,
+                n_jobs=-1,
+                verbose=0,
+                #error_score='raise',
+            )
+        search = randsearchcv.fit(X_train, y_train)
+        
         randsearchcv = RandomizedSearchCV(
             model.estimator,
             model.distributions,
@@ -80,16 +92,17 @@ def sksurv_cross_validation(model, X_train, y_train, n_iter):
         model.estimator = search.best_estimator_
         return model
 
-def sksurv_risk_score(model, X_test): # OK for models in sksurv which predict the risk score when using self.predict()
-    predictions = model.predict(X_test)  # Predict the risk score
+def sksurv_risk_score(model, X_test):
+    predictions = model.pipeline.predict(X_test)  # Predict the risk score
     scaler = MinMaxScaler()
     risk_score = scaler.fit_transform(predictions.reshape(-1, 1))
-    #The range of this number has to be between 0 and 1, with larger numbers being associated with higher probability of having HF. The values, -Inf, Inf and NA, are not allowed. 
+    #The range of this number has to be between 0 and 1, with larger numbers being associated with higher probability of having HF. The values, -Inf, Inf and NA, are not allowed.
     return risk_score.to_numpy().flatten()
 
 
-def xgb_risk_score(self, X_test):  # OK for models in sksurv which predict the risk score
-    predictions = - self.predict(X_test)  # Predict the survival time, take the negative to convert to risk scores
+def xgb_risk_score(model, X_test):  # OK for models in sksurv which predict the risk score
+    # Predict the survival time, take the negative to convert to risk scores
+    predictions = - model.pipeline.predict(X_test)
     scaler = MinMaxScaler()
     risk_score = scaler.fit_transform(predictions.reshape(-1, 1))
     #The range of this number has to be between 0 and 1, with larger numbers being associated with higher probability of having HF. The values, -Inf, Inf and NA, are not allowed.
@@ -98,25 +111,20 @@ def xgb_risk_score(self, X_test):  # OK for models in sksurv which predict the r
     
 class candidate_model:
     def __init__(self):
-        self.estimator = None
-        self.model = None
-        
-    def fit(self, X_train, y_train):
-        print("Model training...")
-        self.estimator.fit(X_train, y_train)
-        return self
+        self.monitor = None
+        self.with_pca = False           
 
-    def predict(self, X_test):
-        print("Prediction with the best model...")
-        predictions = self.estimator.predict(X_test)
-        return predictions
-
-    def model_pipeline(self, X_train, y_train, n_iter):
-        self = self.cross_validation(X_train, y_train, n_iter)
-        self = self.fit(X_train, y_train)
-        return self
-        
     def cross_validation(self, X_train, y_train, n_iter):
+        randsearchcv = RandomizedSearchCV(
+            self.pipeline,
+            self.distributions,
+            random_state=0,
+            n_iter=n_iter,
+            n_jobs=-1,
+            verbose=0,
+            error_score='raise',
+        )
+        self.pipeline = randsearchcv.fit(X_train, y_train)
         return self
 
     def evaluate(self, X_train, X_test, y_train, y_test):
@@ -130,19 +138,10 @@ class candidate_model:
 
         return self
     
-    def objective(trial):
-        with_pca = trial.suggest_categorical("with_pca", [True, False])
-
-        if with_pca:
-            pca_n_components = trial.suggest_int(
-                "pca_n_components", 2, 30)  # suggest an integer from 2 to 30
-            dimen_red_algorithm = PCA(n_components=pca_n_components)
-        else:
-            dimen_red_algorithm = 'passthrough'
-            
-        score = cross_val_score(pipeline, X, y, scoring='f1')
-        f1 = score.mean()  # calculate the mean of scores
-        return f1
+    #def objective(trial):                  
+    #    score = cross_val_score(pipeline, X, y, scoring='f1')
+    #    f1 = score.mean()  # calculate the mean of scores
+    #    return f1
 
     # maximise the score during tuning
     #study = optuna.create_study(direction="maximize")
@@ -162,10 +161,8 @@ class candidate_model:
             ]
         )
 
-        if self.with_pca:
-            pca = PCA(self.n_components)
-            pca_transformer = ColumnTransformer(
-                transformers=[("pca", pca, selector(pattern="k__"))], remainder='passthrough')
+        pca_transformer = ColumnTransformer(
+            transformers=[("reduce_dim", PCA(), selector(pattern="k__"))], remainder='passthrough')
 
         preprocessor = ColumnTransformer(
             transformers=[
@@ -176,44 +173,38 @@ class candidate_model:
             ]
         )
 
-        if self.with_pca:
-            regressor = Pipeline(
-                steps=[("preprocessor", preprocessor), ("pca", pca_transformer), ("model", self.model)])
-        else:
-            regressor = Pipeline(
-                steps=[("preprocessor", preprocessor), ("model", self.model)])
+        regressor = Pipeline(
+            steps=[("preprocessor", preprocessor), ("reduce_dim", pca_transformer), ("estimator", self.estimator)])
 
         with open("regressor.html", "w") as f:
             f.write(estimator_html_repr(regressor))
+
+        regressor.fit = lambda X_train, y_train: regressor.fit(
+            X_train, y_train, estimator__monitor=self.monitor
+        )
         return regressor
+    
 class sksurv_gbt(candidate_model):
     def __init__(self):
-        super().__init__(with_pca, n_components)
+        super().__init__()
         self.monitor = EarlyStoppingMonitor(25, 50)
         
-        self.model = GradientBoostingSurvivalAnalysis()
+        self.estimator = GradientBoostingSurvivalAnalysis()
         
-        self.estimator = self.create_pipeline()
-                
-        self.estimator.fit = lambda X_train, y_train: self.estimator.fit(
-            X_train, y_train, model__monitor=self.monitor
-        )
+        self.pipeline = self.create_pipeline()
 
         self.distributions = dict(
-            model__learning_rate=uniform(loc=1e-2, scale=0.4),
-            model__max_depth=randint(2, 6),
-            model__loss=["coxph"],
-            model__n_estimators=randint(100, 350),
-            model__min_samples_split=randint(2, 6),
-            model__min_samples_leaf=randint(1, 10),
-            model__subsample=uniform(loc=0.5, scale=0.5),
-            model__max_leaf_nodes=randint(2, 30),
-            model__dropout_rate=uniform(loc=0, scale=1),
+            reduce_dim=['passthrough', PCA(0.95), PCA(0.98)],
+            estimator__learning_rate=uniform(loc=1e-2, scale=0.4),
+            estimator__max_depth=randint(2, 6),
+            estimator__loss=["coxph"],
+            estimator__n_estimators=randint(100, 350),
+            estimator__min_samples_split=randint(2, 6),
+            estimator__min_samples_leaf=randint(1, 10),
+            estimator__subsample=uniform(loc=0.5, scale=0.5),
+            estimator__max_leaf_nodes=randint(2, 30),
+            estimator__dropout_rate=uniform(loc=0, scale=1),
         )
-
-    def cross_validation(self, X_train, y_train, n_iter):
-        self = sksurv_cross_validation(self, X_train, y_train, n_iter)
-        return self
     
     def risk_score(self, X_test):
         risk_score =  sksurv_risk_score(self, X_test)
@@ -222,26 +213,20 @@ class sksurv_gbt(candidate_model):
 
 class CoxPH(candidate_model):
     def __init__(self):
-        super().__init__(with_pca, n_components)
+        super().__init__()
         self.monitor = EarlyStoppingMonitor(25, 50)
 
-        self.model = CoxPHSurvivalAnalysis(
+        self.estimator = CoxPHSurvivalAnalysis(
             ties='breslow', tol=1e-09, verbose=0)
 
-        self.estimator = self.create_pipeline()
+        self.pipeline = self.create_pipeline()
 
-        self.estimator.fit = lambda X_train, y_train: self.estimator.fit(
-            X_train, y_train, model__monitor=self.monitor
-        )
-
+        
         self.distributions = dict(
-            model__alpha=uniform(loc=0, scale=1),
-            model__n_iter=randint(80, 200)
+            reduce_dim=['passthrough', PCA(0.95), PCA(0.98)],
+            estimator__alpha=uniform(loc=0, scale=1),
+            estimator__n_iter=randint(80, 200)
         )
-    
-    def cross_validation(self, X_train, y_train, n_iter):
-        self = sksurv_cross_validation(self, X_train, y_train, n_iter)
-        return self
     
     def risk_score(self, X_test):
         risk_score =  sksurv_risk_score(self, X_test)
@@ -249,24 +234,18 @@ class CoxPH(candidate_model):
 
 class IPCRidge_sksurv(candidate_model):
     def __init__(self):
-        super().__init__(with_pca, n_components)
+        super().__init__()
         self.monitor = EarlyStoppingMonitor(25, 50)
 
-        self.model = IPCRidge(alpha=1.0)
+        self.estimator = IPCRidge(alpha=1.0)
 
 
-        self.estimator = self.create_pipeline()
-
-        self.estimator.fit = lambda X_train, y_train: self.estimator.fit(
-            X_train, y_train, model__monitor=self.monitor
-        )
+        self.pipeline = self.create_pipeline()
 
         self.distributions = dict(
-            model__alpha=uniform(loc=0, scale=1))
+            reduce_dim=['passthrough', PCA(0.95), PCA(0.98)],
+            estimator__alpha=uniform(loc=0, scale=1))
 
-    def cross_validation(self, X_train, y_train, n_iter):
-        self = sksurv_cross_validation(self, X_train, y_train, n_iter)
-        return self
     
     def risk_score(self, X_test):
         risk_score =  sksurv_risk_score(self, X_test)
@@ -275,24 +254,17 @@ class IPCRidge_sksurv(candidate_model):
 
 class Coxnet(candidate_model):
     def __init__(self):
-        super().__init__(with_pca, n_components)
+        super().__init__()
         self.monitor = EarlyStoppingMonitor(25, 50)
 
-        self.model =CoxnetSurvivalAnalysis(n_alphas=100, l1_ratio=0.5)
-        self.estimator = self.create_pipeline()
-
-        self.estimator.fit = lambda X_train, y_train: self.estimator.fit(
-            X_train, y_train, model__monitor=self.monitor
-        )
+        self.estimator =CoxnetSurvivalAnalysis(n_alphas=100, l1_ratio=0.5)
+        self.pipeline = self.create_pipeline()
 
         self.distributions = dict(
-            model__l1_ratio=uniform(loc=0, scale=1),
-            model__n_alphas=randint(50, 200)
+            reduce_dim=['passthrough', PCA(0.95), PCA(0.98)],
+            estimator__l1_ratio=uniform(loc=0, scale=1),
+            estimator__n_alphas=randint(50, 200)
         )        
-
-    def cross_validation(self, X_train, y_train, n_iter):
-        self = sksurv_cross_validation(self, X_train, y_train, n_iter)
-        return self
 
     def risk_score(self, X_test):
         risk_score =  sksurv_risk_score(self, X_test)
@@ -313,8 +285,8 @@ class sklearn_wei(XGBSEStackedWeibull):
 
 
 class xgbse_weibull(candidate_model):
-    def __init__(self, with_pca = False, n_components = None):
-        super().__init__(with_pca, n_components)
+    def __init__(self):
+        super().__init__()
         xgb_params = {
             "aft_loss_distribution": "normal",
             "aft_loss_distribution_scale": 1,
@@ -330,22 +302,22 @@ class xgbse_weibull(candidate_model):
         }
         # fitting with early stopping
 
-        self.model = sklearn_wei(xgb_params)
+        self.estimator = sklearn_wei(xgb_params)
 
-        self.model.score = bind(self, score)
+        self.estimator.score = bind(self, score)
 
-        self.with_pca = with_pca
-        self.n_components = n_components
-        self.estimator = self.create_pipeline()
+        self.pipeline = self.create_pipeline()
+
 
         self.distributions = dict(
-            model__aft_loss_distribution_scale=uniform(loc=0, scale=1),
-            model__colsample_bynode=uniform(loc=0.5, scale=0.5),
-            model__learning_rate=uniform(0, 0.5),
-            model__max_depth=randint(2, 10),
-            model__min_child_weight=randint(2, 10),
-            model__subsample=uniform(loc=0.5, scale=0.5),
-            model__tree_method=["hist"],
+            reduce_dim=['passthrough', PCA(0.95), PCA(0.98)],
+            estimator__aft_loss_distribution_scale=uniform(loc=0, scale=1),
+            estimator__colsample_bynode=uniform(loc=0.5, scale=0.5),
+            estimator__learning_rate=uniform(0, 0.5),
+            estimator__max_depth=randint(2, 10),
+            estimator__min_child_weight=randint(2, 10),
+            estimator__subsample=uniform(loc=0.5, scale=0.5),
+            estimator__tree_method=["hist"],
         )
 
     def cross_validation(self, X_train, y_train, n_iter):
@@ -366,33 +338,9 @@ class xgbse_weibull(candidate_model):
         risk_score =  xgb_risk_score(self, X_test)
         return risk_score
 
-
-class xgb_aft(candidate_model):
-    def __init__(self, with_pca = False, n_components = None):
-        super().__init__(with_pca, n_components)
-        self.params = {
-            "aft_loss_distribution": "normal",
-            "aft_loss_distribution_scale": 1,
-            "booster": "dart",
-            "colsample_bynode": 0.5,
-            "eval_metric": "aft-nloglik",
-            "learning_rate": 0.05,
-            "max_depth": 8,
-            "min_child_weight": 50,
-            "objective": "survival:aft",
-            "subsample": 0.5,
-            "tree_method": "hist",
-        }
-        self.model = XGBSurvival(self.params)
-        self.estimator = self.create_pipeline()
-
-    def risk_score(self, X_test):
-        risk_score =  xgb_risk_score(self, X_test)
-        return risk_score
-
 class xgb_optuna(candidate_model):
-    def __init__(self, with_pca = False, n_components = None):
-        super().__init__(with_pca, n_components)
+    def __init__(self):
+        super().__init__()
         # repeated K-folds
         self.N_SPLITS = 3
         self.N_REPEATS = 1
@@ -424,7 +372,7 @@ class xgb_optuna(candidate_model):
         }
 
         self.model = XGBSurvival(self.base_params, num_boost_round=10000)
-        self.estimator = self.create_pipeline()
+        self.pipeline = self.create_pipeline()
 
     def cross_validation(self, X_train, y_train, n_iter):
         self.N_TRIALS = n_iter
@@ -500,9 +448,9 @@ class xgb_optuna(candidate_model):
             self.estimator.fit(
                 X_A,
                 y_A,
-                model__validation_data=(X_B_transformed, y_B),
-                model__verbose_eval=0,
-                model__early_stopping_rounds=self.EARLY_STOPPING_ROUNDS,
+                estimator__validation_data=(X_B_transformed, y_B),
+                estimator__verbose_eval=0,
+                estimator__early_stopping_rounds=self.EARLY_STOPPING_ROUNDS,
             )
             score += self.estimator.score(X_B, y_B)
         score /= n_repeats
@@ -518,7 +466,7 @@ class xgb_optuna(candidate_model):
     
 class sksurv_gbt_optuna(candidate_model):
     def __init__(self):
-        super().__init__(with_pca, n_components)
+        super().__init__()
         # repeated K-folds
         self.N_SPLITS = 3
         self.N_REPEATS = 1
@@ -536,13 +484,9 @@ class sksurv_gbt_optuna(candidate_model):
         
         self.monitor = EarlyStoppingMonitor(25, 50)
         
-        self.model = GradientBoostingSurvivalAnalysis()
+        self.estimator = GradientBoostingSurvivalAnalysis()
         
-        self.estimator = self.create_pipeline()
-                
-        self.estimator.fit = lambda X_train, y_train: self.estimator.fit(
-            X_train, y_train, model__monitor=self.monitor
-        )
+        self.pipeline = self.create_pipeline()
         
     def cross_validation(self, X_train, y_train, n_iter):
         self.N_TRIALS = n_iter
@@ -617,9 +561,9 @@ class sksurv_gbt_optuna(candidate_model):
             self.estimator.fit(
                 X_A,
                 y_A,
-                model__validation_data=(X_B_transformed, y_B),
-                model__verbose_eval=0,
-                model__early_stopping_rounds=self.EARLY_STOPPING_ROUNDS,
+                estimator__validation_data=(X_B_transformed, y_B),
+                estimator__verbose_eval=0,
+                estimator__early_stopping_rounds=self.EARLY_STOPPING_ROUNDS,
             )
             score += self.estimator.score(X_B, y_B)
         score /= n_repeats
