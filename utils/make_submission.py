@@ -10,13 +10,14 @@ from dotenv import load_dotenv
 from synapseclient import File
 
 load_dotenv()
-ROOT = os.environ.get("ROOT_FOLDER")
+ROOT = os.environ.get("root_folder")
 
 submission_type = ".sif"
 load_dotenv()
 
 submission_name = os.environ.get("submission_name")
-
+print(submission_name)
+#%%
 # Save everything in a submission_name folder in order to keep track of submissions
 outdir = ROOT + "/output/" + submission_name + "/"
 p = pathlib.Path(outdir)

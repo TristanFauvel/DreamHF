@@ -3,6 +3,7 @@ import numpy as np
 from optuna import create_study
 from optuna.samplers import TPESampler
 from scipy.stats import randint, uniform
+from sklearn import model_selection
 from sklearn.compose import ColumnTransformer
 from sklearn.compose import make_column_selector as selector
 from sklearn.decomposition import PCA
@@ -66,39 +67,6 @@ def score(self, X, y):
     event, time = convert_y(y)
     return concordance_index_censored(event, time, risk_score)[0]
 """
-def sksurv_cross_validation(model, X_train, y_train, n_iter):
-    
-        randsearchcv = RandomizedSearchCV(
-                model,
-                model.distributions,
-                random_state=0,
-                n_iter=n_iter,
-                n_jobs=-1,
-                verbose=0,
-                #error_score='raise',
-            )
-        search = randsearchcv.fit(X_train, y_train)
-        
-        randsearchcv = RandomizedSearchCV(
-            model.estimator,
-            model.distributions,
-            random_state=0,
-            n_iter=n_iter,
-            n_jobs=-1,
-            verbose=0,
-            #error_score='raise',
-        )
-        search = randsearchcv.fit(X_train, y_train)
-        model.estimator = search.best_estimator_
-        return model
-
-def sksurv_risk_score(model, X_test):
-    predictions = model.pipeline.predict(X_test)  # Predict the risk score
-    scaler = MinMaxScaler()
-    risk_score = scaler.fit_transform(predictions.reshape(-1, 1))
-    #The range of this number has to be between 0 and 1, with larger numbers being associated with higher probability of having HF. The values, -Inf, Inf and NA, are not allowed.
-    return risk_score.to_numpy().flatten()
-
 
 def xgb_risk_score(model, X_test):  # OK for models in sksurv which predict the risk score
     # Predict the survival time, take the negative to convert to risk scores
@@ -108,7 +76,7 @@ def xgb_risk_score(model, X_test):  # OK for models in sksurv which predict the 
     #The range of this number has to be between 0 and 1, with larger numbers being associated with higher probability of having HF. The values, -Inf, Inf and NA, are not allowed.
     return risk_score.to_numpy().flatten()
     
-    
+
 class candidate_model:
     def __init__(self):
         self.monitor = None
@@ -181,14 +149,25 @@ class candidate_model:
 
         regressor.fit = lambda X_train, y_train: regressor.fit(
             X_train, y_train, estimator__monitor=self.monitor
-        )
+            )
         return regressor
-    
-class sksurv_gbt(candidate_model):
+
+class sksurv_model(candidate_model):
     def __init__(self):
         super().__init__()
         self.monitor = EarlyStoppingMonitor(25, 50)
-        
+                
+    def risk_score(self, X_test):
+        predictions = self.pipeline.predict(X_test)  # Predict the risk score
+        scaler = MinMaxScaler()
+        risk_score = scaler.fit_transform(predictions.reshape(-1, 1))
+        #The range of this number has to be between 0 and 1, with larger numbers being associated with higher probability of having HF. The values, -Inf, Inf and NA, are not allowed.
+        return risk_score.to_numpy().flatten()
+    
+class sksurv_gbt(sksurv_model):
+    def __init__(self):
+        super().__init__()
+         
         self.estimator = GradientBoostingSurvivalAnalysis()
         
         self.pipeline = self.create_pipeline()
@@ -211,11 +190,10 @@ class sksurv_gbt(candidate_model):
         return risk_score
      
 
-class CoxPH(candidate_model):
+class CoxPH(sksurv_model):
     def __init__(self):
         super().__init__()
-        self.monitor = EarlyStoppingMonitor(25, 50)
-
+         
         self.estimator = CoxPHSurvivalAnalysis(
             ties='breslow', tol=1e-09, verbose=0)
 
@@ -232,13 +210,10 @@ class CoxPH(candidate_model):
         risk_score =  sksurv_risk_score(self, X_test)
         return risk_score
 
-class IPCRidge_sksurv(candidate_model):
+class IPCRidge_sksurv(sksurv_model):
     def __init__(self):
         super().__init__()
-        self.monitor = EarlyStoppingMonitor(25, 50)
-
         self.estimator = IPCRidge(alpha=1.0)
-
 
         self.pipeline = self.create_pipeline()
 
@@ -252,11 +227,9 @@ class IPCRidge_sksurv(candidate_model):
         return risk_score
     
 
-class Coxnet(candidate_model):
+class Coxnet(sksurv_model):
     def __init__(self):
         super().__init__()
-        self.monitor = EarlyStoppingMonitor(25, 50)
-
         self.estimator =CoxnetSurvivalAnalysis(n_alphas=100, l1_ratio=0.5)
         self.pipeline = self.create_pipeline()
 
@@ -464,7 +437,7 @@ class xgb_optuna(candidate_model):
         return risk_score
     
     
-class sksurv_gbt_optuna(candidate_model):
+class sksurv_gbt_optuna(sksurv_model):
     def __init__(self):
         super().__init__()
         # repeated K-folds
@@ -480,10 +453,7 @@ class sksurv_gbt_optuna(candidate_model):
         self.N_JOBS = -1  # number of parallel threads
 
         self.sampler = TPESampler(seed=self.RS, multivariate=self.MULTIVARIATE)
-        
-        
-        self.monitor = EarlyStoppingMonitor(25, 50)
-        
+         
         self.estimator = GradientBoostingSurvivalAnalysis()
         
         self.pipeline = self.create_pipeline()
@@ -534,7 +504,10 @@ class sksurv_gbt_optuna(candidate_model):
             "max_leaf_nodes": trial.suggest_int("max_leaf_nodes", 2, 30),
             "dropout_rate": trial.suggest_float("dropout_rate", 0, 1, log=False),
         }
-        
+        score = model_selection.cross_val_score(self.pipeline, X_train, y_train, n_jobs=-1, cv=3)
+        accuracy = score.mean()
+
+    
         self, score = self.fit(X_train, y_train, with_score=True)
         return score
 
