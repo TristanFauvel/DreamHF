@@ -12,7 +12,6 @@ random.seed(10)
 
 arguments = sys.argv
 
-arguments = [0, '/home/tristan/Desktop/Repos/DreamHF']
 ROOT = arguments[1]
 
 print("Loading the data...")

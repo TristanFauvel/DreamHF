@@ -185,8 +185,14 @@ def _centered_log_transform(readcounts_df) -> pd.DataFrame:
 def Salosensaari_processing(
     pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates
 ):
-    pheno_df_train = pheno_df_train.loc[:, clinical_covariates+ ["Event", "Event_time"]]
-    pheno_df_test = pheno_df_test.loc[:, clinical_covariates + ["Event", "Event_time"]]
+    
+    if "Event" in pheno_df_test:
+        event_test = ["Event", "Event_time"]
+    else:
+        event_test = []
+        
+    pheno_df_train = pheno_df_train.loc[:, clinical_covariates + ["Event", "Event_time"]]
+    pheno_df_test = pheno_df_test.loc[:, clinical_covariates + event_test]
 
     readcounts_df_train = _taxa_aggregation(readcounts_df_train)
     selection = _taxa_filtering(readcounts_df_train)
@@ -218,10 +224,15 @@ def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcount
     if any(np.setdiff1d(clinical_covariates, CLINICAL_COVARIATES)):
         raise(ValueError('One of the clinical covariates is not in the prespecified list'))
     
+    if "Event" in pheno_df_test:
+        event_test = ["Event", "Event_time"]
+    else:
+        event_test = []
+
     pheno_df_train = pheno_df_train.loc[:, list(clinical_covariates)+
         ["Event", "Event_time"]]
     pheno_df_test = pheno_df_test.loc[:, list(clinical_covariates)+
-        ["Event", "Event_time"]]
+        event_test]
     
     
     adiv_train = diversity_metrics(readcounts_df_train, 'observed_otus')
