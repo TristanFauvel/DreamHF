@@ -337,82 +337,44 @@ class xgb_optuna(candidate_model):
             lambda trial: self.objective(
                 trial,
                 X_train,
-                y_train,
-                random_state=self.RS,
-                n_splits=self.N_SPLITS,
-                n_repeats=self.N_REPEATS,
-                n_jobs=-1,
-                early_stopping_rounds=self.EARLY_STOPPING_ROUNDS,
+                y_train
             ),
             n_trials=self.N_TRIALS,
             n_jobs=-1,
         )
         self.optimal_hp = study.best_params
-        self = self.fit(X_train, y_train)
+        self.pipeline.set_params(**self.optimal_hp)
+        self.pipeline = self.pipeline.fit(X_train, y_train)
         return self
 
     def objective(
         self,
         trial,
         X_train,
-        y_train,
-        random_state=22,
-        n_splits=3,
-        n_repeats=2,
-        n_jobs=-1,
-        early_stopping_rounds=50,
-    ):
+        y_train
+        ):
         # XGBoost parameters
 
-        xgb_params = {
-            "objective": "survival:aft",
-            "eval_metric": "aft-nloglik",
-            "aft_loss_distribution": "normal",
-            "aft_loss_distribution_scale": trial.suggest_float('aft_loss_distribution_scale', 0.1, 10.0, log=True),
-            "tree_method": "hist",
-            "learning_rate": trial.suggest_float("learning_rate", 1e-2, 1, log=True),
-            "max_depth": trial.suggest_int("max_depth", 2, 12),
-            "booster": "dart",
-            "subsample": trial.suggest_float("subsample", 0.4, 0.8, log=False),
-            "alpha": trial.suggest_float("alpha", 0.01, 10.0, log=True),
-            "lambda": trial.suggest_float("lambda", 1e-8, 10.0, log=True),
-            "gamma": trial.suggest_float("lambda", 1e-8, 10.0, log=True),
+        params = {
+            "estimator__objective": "survival:aft",
+            "estimator__eval_metric": "aft-nloglik",
+            "estimator__aft_loss_distribution": "normal",
+            "estimator__aft_loss_distribution_scale": trial.suggest_float('aft_loss_distribution_scale', 0.1, 10.0, log=True),
+            "estimator__tree_method": "hist",
+            "estimator__learning_rate": trial.suggest_float("learning_rate", 1e-2, 1, log=True),
+            "estimator__max_depth": trial.suggest_int("max_depth", 2, 12),
+            "estimator__booster": "dart",
+            "estimator__subsample": trial.suggest_float("subsample", 0.4, 0.8, log=False),
+            "estimator__alpha": trial.suggest_float("alpha", 0.01, 10.0, log=True),
+            "estimator__lambda": trial.suggest_float("lambda", 1e-8, 10.0, log=True),
+            "estimator__gamma": trial.suggest_float("lambda", 1e-8, 10.0, log=True),
         }
 
-        self, score = self.fit(X_train, y_train, with_score = True)
-        return score
-
-    def fit(self, X_train, y_train, with_score = False):
-        n_splits = self.N_SPLITS
-        n_repeats = self.N_REPEATS
-        rkf = RepeatedKFold(
-            n_splits=n_splits, n_repeats=n_repeats, random_state=0
-        )
-        score = 0
-        for train_index, test_index in rkf.split(X_train):
-            X_A, X_B = X_train.iloc[train_index,
-                                    :], X_train.iloc[test_index, :]
-            y_A, y_B = y_train[train_index], y_train[test_index]
-
-            if not check_is_fitted(self.estimator):
-                self.estimator[:-1].fit(X_A, y_A)
-
-            X_B_transformed = self.estimator.named_steps['preprocessor'].transform(
-                X_B)
-
-            self.estimator.fit(
-                X_A,
-                y_A,
-                estimator__validation_data=(X_B_transformed, y_B),
-                estimator__verbose_eval=0,
-                estimator__early_stopping_rounds=self.EARLY_STOPPING_ROUNDS,
-            )
-            score += self.estimator.score(X_B, y_B)
-        score /= n_repeats
-        if with_score:
-            return self, score
-        else:
-            return self
+        self.pipeline.set_params(**params)
+        score = model_selection.cross_val_score(
+            self.pipeline, X_train, y_train, n_jobs=-1, cv=3)
+        accuracy = score.mean()
+        return accuracy    
 
     def risk_score(self, X_test):
         risk_score =  xgb_risk_score(self, X_test)
