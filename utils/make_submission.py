@@ -61,9 +61,9 @@ project_id = os.environ.get("project_id")
 syn = synapseclient.login(username, password)
 
 
-# Add a local file to an existing project on Synapse
+#%% Add a local file to an existing project on Synapse
 file = File(path=file_to_upload, parent=project_id)
-
+ 
 file = syn.store(
     file
 )  # """"

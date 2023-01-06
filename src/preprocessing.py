@@ -235,8 +235,8 @@ def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcount
         event_test]
     
     
-    adiv_train = diversity_metrics(readcounts_df_train, 'observed_otus')
-    adiv_test = diversity_metrics(readcounts_df_test, 'observed_otus')
+    adiv_train = diversity_metrics(readcounts_df_train, 'observed_otus').astype('float64')
+    adiv_test = diversity_metrics(readcounts_df_test, 'observed_otus').astype('float64')
     shannon_train = diversity_metrics(readcounts_df_train, 'shannon')
     shannon_test = diversity_metrics(readcounts_df_test, 'shannon')
     
@@ -249,10 +249,10 @@ def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcount
        
         df_train = pheno_df_train.join(df_clr_train.loc[:,taxa])
         df_test = pheno_df_test.join(df_clr_test.loc[:,taxa])  
-        df_train['adiv'] = adiv_train
-        df_test['adiv'] = adiv_test
-        df_train['shannon'] = shannon_train
-        df_test['shannon'] = shannon_test
+    df_train['adiv'] = adiv_train
+    df_test['adiv'] = adiv_test
+    df_train['shannon'] = shannon_train
+    df_test['shannon'] = shannon_test
         
     covariates = df_train.loc[
             :, (df_train.columns != "Event") & (df_train.columns != "Event_time")
@@ -268,10 +268,15 @@ def standard_processing(pheno_df_train, pheno_df_test, readcounts_df_train, read
     if any(np.setdiff1d(clinical_covariates, CLINICAL_COVARIATES)):
         raise(ValueError('One of the clinical covariates is not in the prespecified list'))
     
-    pheno_df_train = pheno_df_train.loc[:, list(clinical_covariates)+
-        ["Event", "Event_time"]]
-    pheno_df_test = pheno_df_test.loc[:, list(clinical_covariates)+
-        ["Event", "Event_time"]]
+    if "Event" in pheno_df_test:
+        event_test = ["Event", "Event_time"]
+    else:
+        event_test = []
+
+    pheno_df_train = pheno_df_train.loc[:, list(clinical_covariates) +
+                                        ["Event", "Event_time"]]
+    pheno_df_test = pheno_df_test.loc[:, list(clinical_covariates) +
+                                      event_test]
     
     if taxa is None:
         df_train = pheno_df_train

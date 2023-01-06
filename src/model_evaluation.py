@@ -55,7 +55,7 @@ def evaluate_model(model, X_train, X_test, y_train, y_test):
     integrated_brier_score_train = np.nan
     integrated_brier_score_test = np.nan
 
-    if not isinstance(model, XGBSurvival):
+    if hasattr(model, 'predict_survival_function'): # not isinstance(model.estimator, XGBSurvival):
         #%% Integrated Brier score
         
         try:

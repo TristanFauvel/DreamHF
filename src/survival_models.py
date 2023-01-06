@@ -2,6 +2,8 @@
 import types
 
 import numpy as np
+import pandas as pd
+import sklearn
 from optuna import create_study
 from optuna.samplers import TPESampler
 from scipy.stats import randint, uniform
@@ -12,7 +14,11 @@ from sklearn.decomposition import PCA
 from sklearn.feature_selection import SelectKBest
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import make_scorer
-from sklearn.model_selection import RandomizedSearchCV, RepeatedKFold
+from sklearn.model_selection import (
+    RandomizedSearchCV,
+    RepeatedKFold,
+    RepeatedStratifiedKFold,
+)
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, MinMaxScaler, StandardScaler
 from sklearn.utils import estimator_html_repr
@@ -26,6 +32,7 @@ from xgbse.metrics import concordance_index
 
 from xgboost_wrapper import XGBSurvival
 
+sklearn.set_config(transform_output="pandas")
 
 def bind(instance, method):
     def binding_scope_fn(*args, **kwargs):
@@ -34,7 +41,36 @@ def bind(instance, method):
     return binding_scope_fn
 
 
+def cross_validation_score(pipeline, X_train, y_train, n_splits = 3, n_repeats = 1, early_stopping_rounds = 50):
+    # Compute the cross-validation score, works with pandas dataframe (the sklearn function does not)
+       
+        rkf = RepeatedKFold(
+            n_splits=n_splits, n_repeats=n_repeats, random_state=0
+        )
+        score = 0
+        for train_index, test_index in rkf.split(X_train):
+            X_A, X_B = X_train.iloc[train_index,
+                                    :], X_train.iloc[test_index, :]
+            y_A, y_B = y_train[train_index], y_train[test_index]
 
+            if not check_is_fitted(pipeline):
+                pipeline[:-1].fit(X_A, y_A)
+
+            X_B_transformed = pipeline.estimator.named_steps['preprocessor'].transform(
+                X_B)
+
+            pipeline.fit(
+                X_A,
+                y_A,
+                estimator__validation_data=(X_B_transformed, y_B),
+                estimator__verbose_eval=0,
+                estimator__early_stopping_rounds=early_stopping_rounds
+            )
+            score += pipeline.score(X_B, y_B)
+        score /= (n_repeats*n_splits)
+        return score
+        
+        
 class EarlyStoppingMonitor:
     def __init__(self, window_size, max_iter_without_improvement):
         self.window_size = window_size
@@ -82,7 +118,7 @@ def xgb_risk_score(model, X_test):  # OK for models in sksurv which predict the 
 class candidate_model:
     def __init__(self):
         self.monitor = None
-        self.with_pca = False           
+        self.with_pca = False
 
     def cross_validation(self, X_train, y_train, n_iter):
         randsearchcv = RandomizedSearchCV(
@@ -90,9 +126,9 @@ class candidate_model:
             self.distributions,
             random_state=0,
             n_iter=n_iter,
-            n_jobs=-1,
-            verbose=0,
-            error_score='raise',
+            n_jobs=1,
+            verbose=10,
+            error_score='raise'
         )
         self.pipeline = randsearchcv.fit(X_train, y_train)
         return self
@@ -102,32 +138,31 @@ class candidate_model:
         self.harrell_C_training = self.estimator.score(X_train, y_train)
         self.harrell_C_test = self.estimator.score(X_test, y_test)
         """
-        self.harrell_C_training = concordance_index_censored(y_train['Event'], y_train['Event_time'], self.risk_score(X_train))[0]
+        self.harrell_C_training = concordance_index_censored(
+            y_train['Event'], y_train['Event_time'], self.risk_score(X_train))[0]
         self.harrell_C_test = concordance_index_censored(
             y_test['Event'], y_test['Event_time'], self.risk_score(X_test))[0]
+        
+        result = {
+            "Harrell C": [self.harrell_C_training, self.harrell_C_test
+            ]
+        }
+
+        print(pd.DataFrame(result, index=["train", "test"]))
 
         return self
-    
-    #def objective(trial):                  
-    #    score = cross_val_score(pipeline, X, y, scoring='f1')
-    #    f1 = score.mean()  # calculate the mean of scores
-    #    return f1
-
-    # maximise the score during tuning
-    #study = optuna.create_study(direction="maximize")
-    #study.optimize(objective, n_trials=100)  # run the objective function 100 times
 
     def create_pipeline(self):
         numeric_transformer = Pipeline(
             steps=[
-                ("imputer", SimpleImputer(strategy="mean")),
+                ("mean_imputer", SimpleImputer(strategy="mean")),
                 ("scaler", StandardScaler()),
             ]
         )
 
         categorical_transformer = Pipeline(
             steps=[
-                ("imputer", SimpleImputer(strategy="most_frequent")),
+                ("frequent_imputer", SimpleImputer(strategy="most_frequent")),
             ]
         )
 
@@ -143,13 +178,11 @@ class candidate_model:
             ]
         )
 
-        types.MethodType(lambda X_train, y_train: self.estimator.fit(
-            X_train, y_train, monitor=self.monitor
-        ), self.estimator)
-        
         regressor = Pipeline(
-            steps=[("preprocessor", preprocessor), ("reduce_dim", pca_transformer), ("estimator", self.estimator)])
+            steps=[("preprocessor", preprocessor), ("pca_transformer", pca_transformer), ("estimator", self.estimator)])
 
+        # Scale predictions : predictions are risk score between 0 and 1
+                
         with open("regressor.html", "w") as f:
             f.write(estimator_html_repr(regressor))
 
@@ -176,16 +209,16 @@ class sksurv_gbt(sksurv_model):
         self.pipeline = self.create_pipeline()
 
         self.distributions = dict(
-            reduce_dim=['passthrough', PCA(0.95), PCA(0.98)],
+            pca_transformer__reduce_dim= ['passthrough', PCA(0.95), PCA(0.98)],
             estimator__learning_rate=uniform(loc=1e-2, scale=0.4),
             estimator__max_depth=randint(2, 6),
-            estimator__loss=["coxph"],
+            estimator__loss=["coxph"], #ipcwls corresponds to aft model
             estimator__n_estimators=randint(100, 350),
             estimator__min_samples_split=randint(2, 6),
             estimator__min_samples_leaf=randint(1, 10),
             estimator__subsample=uniform(loc=0.5, scale=0.5),
             estimator__max_leaf_nodes=randint(2, 30),
-            estimator__dropout_rate=uniform(loc=0, scale=1)
+            estimator__dropout_rate=uniform(loc=0, scale=0.5)
         )
      
 
@@ -200,7 +233,8 @@ class CoxPH(sksurv_model):
 
         
         self.distributions = dict(
-            reduce_dim=['passthrough', PCA(0.95), PCA(0.98)],
+            pca_transformer__reduce_dim=[
+                'passthrough', PCA(0.95), PCA(0.98)],
             estimator__alpha=uniform(loc=0, scale=1),
             estimator__n_iter=randint(80, 200)
         )
@@ -213,7 +247,7 @@ class IPCRidge_sksurv(sksurv_model):
         self.pipeline = self.create_pipeline()
 
         self.distributions = dict(
-            reduce_dim=['passthrough', PCA(0.95), PCA(0.98)],
+            pca_transformer__reduce_dim=['passthrough', PCA(0.95), PCA(0.98)],
             estimator__alpha=uniform(loc=0, scale=1))
 
 
@@ -224,7 +258,7 @@ class Coxnet(sksurv_model):
         self.pipeline = self.create_pipeline()
 
         self.distributions = dict(
-            reduce_dim=['passthrough', PCA(0.95), PCA(0.98)],
+            pca_transformer__reduce_dim=['passthrough', PCA(0.95), PCA(0.98)],
             estimator__l1_ratio=uniform(loc=0, scale=1),
             estimator__n_alphas=randint(50, 200)
         )         
@@ -269,7 +303,7 @@ class xgbse_weibull(candidate_model):
 
 
         self.distributions = dict(
-            reduce_dim=['passthrough', PCA(0.95), PCA(0.98)],
+            pca_transformer__reduce_dim= ['passthrough', PCA(0.95), PCA(0.98)],
             estimator__aft_loss_distribution_scale=uniform(loc=0, scale=1),
             estimator__colsample_bynode=uniform(loc=0.5, scale=0.5),
             estimator__learning_rate=uniform(0, 0.5),
@@ -286,13 +320,48 @@ class xgbse_weibull(candidate_model):
             scoring=make_scorer(concordance_index),
             random_state=0,
             n_iter=n_iter,  # 300
-            n_jobs=-1,
+            n_jobs=1,
             verbose=0,
+            #error_score='raise'
         )
         search = randsearchcv.fit(X_train, y_train)
         self.estimator = search.best_estimator_
         return self 
 
+
+class xgb_aft(sksurv_model):
+    def __init__(self):
+        super().__init__()
+         
+        self.base_params = {
+            "objective": "survival:aft",
+            "eval_metric": "aft-nloglik",
+            "aft_loss_distribution": "normal",
+            "aft_loss_distribution_scale": 1.20,
+            "tree_method": "hist",
+            "booster": "dart",
+            "learning_rate": 0.032833188230587194,
+            "max_depth": 10,
+            "subsample": 0.61828926669036,
+            "alpha": 0.012673256334558281,
+            "lambda": 6.468264510932119,
+            "verbosity": 0,
+            "n_estimators": 10000,
+            "seed": self.RS,
+        }
+
+        self.estimator = XGBSurvival(self.base_params, num_boost_round=10000)
+
+        self.pipeline = self.create_pipeline()
+
+        
+        self.distributions = dict(
+            pca_transformer__reduce_dim=['passthrough', PCA(0.95), PCA(0.98)],
+            estimator__alpha=uniform(loc=0, scale=1),
+            estimator__n_iter=randint(80, 200)
+        )
+        
+        
 class xgb_optuna(candidate_model):
     def __init__(self):
         super().__init__()
@@ -305,8 +374,6 @@ class xgb_optuna(candidate_model):
         # XGBoost
         self.EARLY_STOPPING_ROUNDS = 50
         self.MULTIVARIATE = True
-
-        self.N_JOBS = -1  # number of parallel threads
 
         self.sampler = TPESampler(seed=self.RS, multivariate=self.MULTIVARIATE)
         self.base_params = {
@@ -326,12 +393,10 @@ class xgb_optuna(candidate_model):
             "seed": self.RS,
         }
 
-        self.model = XGBSurvival(self.base_params, num_boost_round=10000)
+        self.estimator = XGBSurvival(self.base_params, num_boost_round=10000)
         self.pipeline = self.create_pipeline()
 
     def cross_validation(self, X_train, y_train, n_iter):
-        self.N_TRIALS = n_iter
-        
         study = create_study(direction="maximize", sampler=self.sampler)
         study.optimize(
             lambda trial: self.objective(
@@ -339,8 +404,8 @@ class xgb_optuna(candidate_model):
                 X_train,
                 y_train
             ),
-            n_trials=self.N_TRIALS,
-            n_jobs=-1,
+            n_trials=n_iter,
+            n_jobs=1,
         )
         self.optimal_hp = study.best_params
         self.pipeline.set_params(**self.optimal_hp)
@@ -372,7 +437,7 @@ class xgb_optuna(candidate_model):
 
         self.pipeline.set_params(**params)
         score = model_selection.cross_val_score(
-            self.pipeline, X_train, y_train, n_jobs=-1, cv=3)
+            self.pipeline, X_train, y_train, n_jobs=1, cv=3)
         accuracy = score.mean()
         return accuracy    
 
@@ -406,10 +471,9 @@ class sksurv_gbt_optuna(sksurv_model):
                 trial,
                 X_train,
                 y_train,
-                n_jobs=-1,
             ),
             n_trials=self.N_TRIALS,
-            n_jobs=-1,
+            n_jobs=1,
         )
         self.optimal_hp = study.best_params
         self.pipeline.set_params(**self.optimal_hp)
@@ -420,12 +484,11 @@ class sksurv_gbt_optuna(sksurv_model):
         self,
         trial,
         X_train,
-        y_train,
-        n_jobs=-1,
+        y_train
     ):
 
         params = {
-            "reduce_dim": trial.suggest_categorical("reduce_dim", ['passthrough', PCA(0.95), PCA(0.98)]),
+            "pca_transformer__reduce_dim": trial.suggest_categorical("pca_transformer__reduce_dim", ['passthrough', PCA(0.95), PCA(0.98)]),
             "estimator__learning_rate": trial.suggest_float("learning_rate", 1e-2, 0.4, log=False),
             "estimator__max_depth": trial.suggest_int("max_depth", 2, 6),
             "estimator__loss": "coxph",
@@ -438,6 +501,6 @@ class sksurv_gbt_optuna(sksurv_model):
         }
         self.pipeline.set_params(**params)
         score = model_selection.cross_val_score(
-            self.pipeline, X_train, y_train, n_jobs=-1, cv=3)
+            self.pipeline, X_train, y_train, n_jobs=1, cv=3)
         accuracy = score.mean()
         return accuracy
