@@ -6,11 +6,37 @@ import pandas as pd
 import sklearn
 from skbio.diversity import alpha_diversity, beta_diversity
 from skbio.stats.composition import clr, multiplicative_replacement
-from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import RFECV, SelectKBest
+from sklearn.model_selection import RepeatedKFold
+
+from survival_models import CoxPH
 
 CLINICAL_COVARIATES = ['Age', 'BodyMassIndex', 'Smoking', 'BPTreatment', 'PrevalentDiabetes',
        'PrevalentCHD', 'PrevalentHFAIL', 'SystolicBP',
        'NonHDLcholesterol', 'Sex']
+
+
+
+def clinical_covariates_selection(X_train, y_train, clinical_covariates):     
+    min_features_to_select = 1  # Minimum number of features to consider    
+    model = CoxPH(0)
+    cv = RepeatedKFold(n_splits = 10, n_repeats = 10)
+
+    features = np.intersect1d(clinical_covariates, X_train.columns)
+    other_features = np.setxor1d(clinical_covariates, X_train.columns)
+    rfecv = RFECV(
+        estimator=model.pipeline[1],
+        step=1,
+        cv=cv,
+        min_features_to_select=min_features_to_select,
+        n_jobs=-1,
+        verbose = 0
+    )
+    rfecv.fit(model.pipeline[0].fit_transform(X_train.loc[:,features], y_train), y_train)
+    features = [el.rsplit('__')[1] for el in rfecv.get_feature_names_out()]
+    output = np.union1d(features, other_features)
+    return output
+
 
 
 def relative_abundance(readcounts_df):
@@ -111,7 +137,8 @@ def _prepare_train_test(df_train: pd.DataFrame, df_test: pd.DataFrame, covariate
     selection_train = df_train.loc[:, "Event_time"] >= -np.inf  # 0
 
     test_sample_ids = df_test.index
-
+    train_sample_ids = df_train.index
+    
     # Make sure that the features do not contain Event or Event_time
     if "Event" in covariates or "Event_time" in covariates:
         Exception("Event or Event_time are included in covariates, please remove them.")
@@ -127,7 +154,7 @@ def _prepare_train_test(df_train: pd.DataFrame, df_test: pd.DataFrame, covariate
     else:
         y_test = None
 
-    return X_train, X_test, y_train, y_test, test_sample_ids
+    return X_train, X_test, y_train, y_test, test_sample_ids, train_sample_ids
 
 
 def _check_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -208,10 +235,10 @@ def Salosensaari_processing(
     selection = (df_train.columns != "Event") & (df_train.columns != "Event_time")
     covariates = df_train.columns[selection]
 
-    X_train, X_test, y_train, y_test, test_sample_ids = _prepare_train_test(
+    X_train, X_test, y_train, y_test, test_sample_ids, train_sample_ids = _prepare_train_test(
         df_train, df_test, covariates
     )
-    return X_train, X_test, y_train, y_test, test_sample_ids
+    return X_train, X_test, y_train, y_test, test_sample_ids, train_sample_ids
 
 
 def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates, n_taxa):      
@@ -251,16 +278,21 @@ def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcount
         df_test = pheno_df_test.join(df_clr_test.loc[:,taxa])  
     df_train['adiv'] = adiv_train
     df_test['adiv'] = adiv_test
-    df_train['shannon'] = shannon_train
-    df_test['shannon'] = shannon_test
+    #df_train['shannon'] = shannon_train
+    #df_test['shannon'] = shannon_test
         
     covariates = df_train.loc[
             :, (df_train.columns != "Event") & (df_train.columns != "Event_time")
         ].columns
-    X_train, X_test, y_train, y_test, test_sample_ids = _prepare_train_test(
+    X_train, X_test, y_train, y_test, test_sample_ids, train_sample_ids = _prepare_train_test(
         df_train, df_test, covariates
     )
-    return X_train, X_test, y_train, y_test, test_sample_ids
+    
+    features = clinical_covariates_selection(X_train, y_train, clinical_covariates)
+    X_train = X_train.loc[:, features]
+    X_test = X_test.loc[:,features]
+    
+    return X_train, X_test, y_train, y_test, test_sample_ids, train_sample_ids
 
 
 def standard_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates, taxa = None):      
@@ -288,10 +320,10 @@ def standard_processing(pheno_df_train, pheno_df_test, readcounts_df_train, read
     covariates = df_train.loc[
             :, (df_train.columns != "Event") & (df_train.columns != "Event_time")
         ].columns
-    X_train, X_test, y_train, y_test, test_sample_ids = _prepare_train_test(
+    X_train, X_test, y_train, y_test, test_sample_ids, train_sample_ids = _prepare_train_test(
         df_train, df_test, covariates
     )
-    return X_train, X_test, y_train, y_test, test_sample_ids
+    return X_train, X_test, y_train, y_test, test_sample_ids, train_sample_ids
 
 
 def taxa_selection(pheno_df_train, readcounts_df_train, n_taxa = 200):

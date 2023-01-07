@@ -113,12 +113,17 @@ def xgb_risk_score(model, X_test):  # OK for models in sksurv which predict the 
     risk_score = scaler.fit_transform(predictions.reshape(-1, 1))
     #The range of this number has to be between 0 and 1, with larger numbers being associated with higher probability of having HF. The values, -Inf, Inf and NA, are not allowed.
     return risk_score.to_numpy().flatten()
-    
+
 
 class candidate_model:
-    def __init__(self):
-        self.monitor = None
-        self.with_pca = False
+    def __init__(self, n_taxa):
+        self.n_taxa = n_taxa
+        
+        if n_taxa > 0:
+            self.base_distribution = dict(pca_transformer__reduce_dim=[
+                'passthrough', PCA(0.95), PCA(0.98)])
+        else :
+            self.base_distribution =dict()
 
     def cross_validation(self, X_train, y_train, n_iter):
         randsearchcv = RandomizedSearchCV(
@@ -166,9 +171,6 @@ class candidate_model:
             ]
         )
 
-        pca_transformer = ColumnTransformer(
-            transformers=[("reduce_dim", PCA(), selector(pattern="k__"))], remainder='passthrough')
-
         preprocessor = ColumnTransformer(
             transformers=[
                 ("num", numeric_transformer, selector(
@@ -177,9 +179,16 @@ class candidate_model:
                     dtype_include=["bool", "category", "Int64"])),
             ]
         )
+        
+        if self.n_taxa >0:
+            pca_transformer = ColumnTransformer(
+                transformers=[("reduce_dim", PCA(), selector(pattern="k__"))], remainder='passthrough')
 
-        regressor = Pipeline(
-            steps=[("preprocessor", preprocessor), ("pca_transformer", pca_transformer), ("estimator", self.estimator)])
+            regressor = Pipeline(
+                steps=[("preprocessor", preprocessor), ("pca_transformer", pca_transformer), ("estimator", self.estimator)])
+        else:
+            regressor = Pipeline(
+                steps=[("preprocessor", preprocessor), ("estimator", self.estimator)])
 
         # Scale predictions : predictions are risk score between 0 and 1
                 
@@ -189,8 +198,8 @@ class candidate_model:
         return regressor
 
 class sksurv_model(candidate_model):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, n_taxa):
+        super().__init__(n_taxa)
         self.monitor = EarlyStoppingMonitor(25, 50)
                 
     def risk_score(self, X_test):
@@ -201,15 +210,14 @@ class sksurv_model(candidate_model):
         return risk_score.to_numpy().flatten()
     
 class sksurv_gbt(sksurv_model):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, n_taxa):
+        super().__init__(n_taxa)
          
         self.estimator = GradientBoostingSurvivalAnalysis()
         
         self.pipeline = self.create_pipeline()
 
-        self.distributions = dict(
-            pca_transformer__reduce_dim= ['passthrough', PCA(0.95), PCA(0.98)],
+        self.distributions = {**self.base_distribution, **dict(
             estimator__learning_rate=uniform(loc=1e-2, scale=0.4),
             estimator__max_depth=randint(2, 6),
             estimator__loss=["coxph"], #ipcwls corresponds to aft model
@@ -219,12 +227,13 @@ class sksurv_gbt(sksurv_model):
             estimator__subsample=uniform(loc=0.5, scale=0.5),
             estimator__max_leaf_nodes=randint(2, 30),
             estimator__dropout_rate=uniform(loc=0, scale=0.5)
-        )
-     
+        )}
+         
+
 
 class CoxPH(sksurv_model):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, n_taxa):
+        super().__init__(n_taxa)
          
         self.estimator = CoxPHSurvivalAnalysis(
             ties='breslow', tol=1e-09, verbose=0)
@@ -232,36 +241,34 @@ class CoxPH(sksurv_model):
         self.pipeline = self.create_pipeline()
 
         
-        self.distributions = dict(
-            pca_transformer__reduce_dim=[
-                'passthrough', PCA(0.95), PCA(0.98)],
+        self.distributions = {**self.base_distribution, **dict(
             estimator__alpha=uniform(loc=0, scale=1),
             estimator__n_iter=randint(80, 200)
-        )
+        )}
      
 class IPCRidge_sksurv(sksurv_model):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, n_taxa):
+        super().__init__(n_taxa)
         self.estimator = IPCRidge(alpha=1.0)
 
         self.pipeline = self.create_pipeline()
 
-        self.distributions = dict(
-            pca_transformer__reduce_dim=['passthrough', PCA(0.95), PCA(0.98)],
-            estimator__alpha=uniform(loc=0, scale=1))
+        self.distributions = {**self.base_distribution, **dict(
+            estimator__alpha=uniform(loc=0, scale=1)
+            )}
 
 
 class Coxnet(sksurv_model):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, n_taxa):
+        super().__init__(n_taxa)
         self.estimator =CoxnetSurvivalAnalysis(n_alphas=100, l1_ratio=0.5)
         self.pipeline = self.create_pipeline()
 
-        self.distributions = dict(
-            pca_transformer__reduce_dim=['passthrough', PCA(0.95), PCA(0.98)],
+        self.distributions = {**self.base_distribution, **dict(
             estimator__l1_ratio=uniform(loc=0, scale=1),
             estimator__n_alphas=randint(50, 200)
-        )         
+        )}
+                 
 class sklearn_wei(XGBSEStackedWeibull):
     """ Workaround to use crossvalidation from
     sklearn
@@ -301,9 +308,7 @@ class xgbse_weibull(candidate_model):
 
         self.pipeline = self.create_pipeline()
 
-
-        self.distributions = dict(
-            pca_transformer__reduce_dim= ['passthrough', PCA(0.95), PCA(0.98)],
+        self.distributions = {**self.base_distribution, **dict(
             estimator__aft_loss_distribution_scale=uniform(loc=0, scale=1),
             estimator__colsample_bynode=uniform(loc=0.5, scale=0.5),
             estimator__learning_rate=uniform(0, 0.5),
@@ -311,7 +316,7 @@ class xgbse_weibull(candidate_model):
             estimator__min_child_weight=randint(2, 10),
             estimator__subsample=uniform(loc=0.5, scale=0.5),
             estimator__tree_method=["hist"],
-        )
+        )}
 
     def cross_validation(self, X_train, y_train, n_iter):
         randsearchcv = RandomizedSearchCV(
@@ -330,8 +335,8 @@ class xgbse_weibull(candidate_model):
 
 
 class xgb_aft(sksurv_model):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, n_taxa):
+        super().__init__(n_taxa)
          
         self.base_params = {
             "objective": "survival:aft",
@@ -355,16 +360,15 @@ class xgb_aft(sksurv_model):
         self.pipeline = self.create_pipeline()
 
         
-        self.distributions = dict(
-            pca_transformer__reduce_dim=['passthrough', PCA(0.95), PCA(0.98)],
+        self.distributions =  {**self.base_distribution, **dict(
             estimator__alpha=uniform(loc=0, scale=1),
             estimator__n_iter=randint(80, 200)
-        )
+        )}
         
         
 class xgb_optuna(candidate_model):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, n_taxa):
+        super().__init__(n_taxa)
         # repeated K-folds
         self.N_SPLITS = 3
         self.N_REPEATS = 1
@@ -447,8 +451,8 @@ class xgb_optuna(candidate_model):
     
     
 class sksurv_gbt_optuna(sksurv_model):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, n_taxa):
+        super().__init__(n_taxa)
 
         # Optuna
         self.RS = 124  # random state
