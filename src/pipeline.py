@@ -75,7 +75,7 @@ def experiment_pipeline(pheno_df_train, pheno_df_test, readcounts_df_train, read
                            'SystolicBP',
                            'NonHDLcholesterol',
                            'Sex']  # CLINICAL_COVARIATES
-    n_taxa = 0
+    n_taxa = 50
     
     if processing == 'Salosensaari':
         X_train, X_test, y_train, y_test, test_sample_ids, train_sample_ids = Salosensaari_processing(
@@ -103,8 +103,8 @@ def experiment_pipeline(pheno_df_train, pheno_df_test, readcounts_df_train, read
             #filename = 'trained_model.sav'
             #pickle.dump(model, open(filename, 'wb'))
     """
-    best_model = 'CoxPH'
-    n_iter = 10 #400
+    best_model = 'sksurv_gbt'
+    n_iter = 400 #400
     
     n_test = pheno_df_test.shape[0]
     model = run_experiment(best_model, n_taxa, n_iter, X_train, X_test, y_train, test_sample_ids, train_sample_ids, ROOT, n_test)

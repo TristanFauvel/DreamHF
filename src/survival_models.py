@@ -240,7 +240,7 @@ class CoxPH(sksurv_model):
         super().__init__(n_taxa)
          
         self.cv = 10
-        self.estimator = CoxPHSurvivalAnalysis(
+        self.estimator = CoxPHSurvivalAnalysis(alpha = 0.1,
             ties='breslow', tol=1e-09, verbose=0)
 
         self.pipeline = self.create_pipeline()
