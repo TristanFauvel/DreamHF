@@ -118,7 +118,7 @@ def xgb_risk_score(model, X_test):  # OK for models in sksurv which predict the 
 class candidate_model:
     def __init__(self, n_taxa):
         self.n_taxa = n_taxa
-        
+        self.cv = 5
         if n_taxa > 0:
             self.base_distribution = dict(pca_transformer__reduce_dim=[
                 'passthrough', PCA(0.95), PCA(0.98)])
@@ -133,7 +133,8 @@ class candidate_model:
             n_iter=n_iter,
             n_jobs=1,
             verbose=10,
-            error_score='raise'
+            #error_score='raise',
+            cv = self.cv
         )
         self.pipeline = randsearchcv.fit(X_train, y_train)
         return self
@@ -235,6 +236,7 @@ class CoxPH(sksurv_model):
     def __init__(self, n_taxa):
         super().__init__(n_taxa)
          
+        self.cv = 10
         self.estimator = CoxPHSurvivalAnalysis(
             ties='breslow', tol=1e-09, verbose=0)
 

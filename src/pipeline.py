@@ -38,7 +38,8 @@ def postprocessing(preds, sample_ids, root, filename):
     results.to_csv(outdir + filename)
 
 
-def test_output_csv(root, y_train):
+
+def test_output_csv(root, y_train, n_test):
     outdir = root + "/output/"
     risk_scores_train = pd.read_csv(outdir + "scores_train.csv")
     risk_scores_train = risk_scores_train.set_index('SampleID')
@@ -56,7 +57,9 @@ def test_output_csv(root, y_train):
     if any(risk_scores.Score < 0) or any(risk_scores.Score >1) or any(risk_scores.isna().Score):
          warnings.warn("Warning : Output file contains invalid values")
 
-    
+    if not (risk_scores.shape[0] == n_test):
+       raise AssertionError("Incorrect number of test cases in the output file")
+
 
 
 def experiment_pipeline(pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, ROOT):
@@ -101,14 +104,16 @@ def experiment_pipeline(pheno_df_train, pheno_df_test, readcounts_df_train, read
             #pickle.dump(model, open(filename, 'wb'))
     """
     best_model = 'CoxPH'
-    n_iter = 10
-    model = run_experiment(best_model, n_taxa, n_iter, X_train, X_test, y_train, test_sample_ids, train_sample_ids, ROOT)
+    n_iter = 1000 #400
+    
+    n_test = pheno_df_test.shape[0]
+    model = run_experiment(best_model, n_taxa, n_iter, X_train, X_test, y_train, test_sample_ids, train_sample_ids, ROOT, n_test)
     # %%
     print("Task completed.")
     return
 
 
-def run_experiment(model_name, n_taxa, n_iter, X_train, X_test, y_train, test_sample_ids, train_sample_ids, ROOT):
+def run_experiment(model_name, n_taxa, n_iter, X_train, X_test, y_train, test_sample_ids, train_sample_ids, ROOT, n_test):
 
     config = dict(
         # xgbse_weibull, sksurv_gbt, xgb_aft, xgb_optuna, CoxPH
@@ -150,7 +155,7 @@ def run_experiment(model_name, n_taxa, n_iter, X_train, X_test, y_train, test_sa
     preds_train = model.risk_score(X_train)    
     postprocessing(preds_train, train_sample_ids, ROOT, "scores_train.csv")
     
-    test_output_csv(ROOT, y_train)
+    test_output_csv(ROOT, y_train, n_test)
     
     run.finish()
     return model

@@ -13,9 +13,9 @@ load_dotenv()
 ROOT = os.environ.get("root_folder")
 
 submission_type = ".sif"
-load_dotenv()
-
 submission_name = os.environ.get("submission_name")
+
+submission_name = 'TristanF_Submission_4'
 print(submission_name)
 #%%
 # Save everything in a submission_name folder in order to keep track of submissions

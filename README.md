@@ -80,6 +80,13 @@ Singularity> Rscript src/baselineModels.R
 
 In that case, the predictions generated are saved to `/output/scores.csv`.
 
+### Submissions:
+
+- Submission 1: Gradient boosted tree (sksurv)
+- Submission 2: Gradient boosted tree with PCA and cross-validation
+- Submission 3: CoxPH with alpha diversity, and selection of clinical covariates with RFECV + crossvalidation
+
+
 ### Content
 
 - `singularity/`: singularity container

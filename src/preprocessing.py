@@ -288,10 +288,12 @@ def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcount
         df_train, df_test, covariates
     )
     
+    ## Select the features using a coxPH model
+    """
     features = clinical_covariates_selection(X_train, y_train, clinical_covariates)
     X_train = X_train.loc[:, features]
     X_test = X_test.loc[:,features]
-    
+    """
     return X_train, X_test, y_train, y_test, test_sample_ids, train_sample_ids
 
 
