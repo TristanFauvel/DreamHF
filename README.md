@@ -84,8 +84,8 @@ In that case, the predictions generated are saved to `/output/scores.csv`.
 
 - Submission 1: Gradient boosted tree (sksurv)
 - Submission 2: Gradient boosted tree with PCA and cross-validation
-- Submission 3: CoxPH with alpha diversity, and selection of clinical covariates with RFECV + crossvalidation
-
+- Submission 3: CoxPH with alpha diversity, and selection of clinical covariates with RFECV + crossvalidation (there was an issue in this submission as the risk score was not computed using 1-predict_survival_function : may cause calibration issues)
+- Submission 4: CoxPH with alpha diversity + crossvalidation
 
 ### Content
 

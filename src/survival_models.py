@@ -204,11 +204,15 @@ class sksurv_model(candidate_model):
         self.monitor = EarlyStoppingMonitor(25, 50)
                 
     def risk_score(self, X_test):
-        predictions = self.pipeline.predict(X_test)  # Predict the risk score
-        scaler = MinMaxScaler()
-        risk_score = scaler.fit_transform(predictions.reshape(-1, 1))
-        #The range of this number has to be between 0 and 1, with larger numbers being associated with higher probability of having HF. The values, -Inf, Inf and NA, are not allowed.
-        return risk_score.to_numpy().flatten()
+        if hasattr(self.pipeline, 'predict_survival_function'):
+            risk_score = 1- self.pipeline.predict_survival_function(X_test, return_array= True)[:,-1]
+    
+        else:
+            predictions = self.pipeline.predict(X_test)  # Predict the risk score
+            scaler = MinMaxScaler()
+            risk_score = scaler.fit_transform(predictions.reshape(-1, 1)).to_numpy().flatten()
+            #The range of this number has to be between 0 and 1, with larger numbers being associated with higher probability of having HF. The values, -Inf, Inf and NA, are not allowed.
+        return risk_score 
     
 class sksurv_gbt(sksurv_model):
     def __init__(self, n_taxa):
@@ -229,7 +233,6 @@ class sksurv_gbt(sksurv_model):
             estimator__max_leaf_nodes=randint(2, 30),
             estimator__dropout_rate=uniform(loc=0, scale=0.5)
         )}
-         
 
 
 class CoxPH(sksurv_model):

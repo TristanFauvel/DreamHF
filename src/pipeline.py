@@ -104,7 +104,7 @@ def experiment_pipeline(pheno_df_train, pheno_df_test, readcounts_df_train, read
             #pickle.dump(model, open(filename, 'wb'))
     """
     best_model = 'CoxPH'
-    n_iter = 1000 #400
+    n_iter = 10 #400
     
     n_test = pheno_df_test.shape[0]
     model = run_experiment(best_model, n_taxa, n_iter, X_train, X_test, y_train, test_sample_ids, train_sample_ids, ROOT, n_test)
