@@ -4,7 +4,7 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 import sklearn
-from skbio.diversity import alpha_diversity, beta_diversity
+from skbio.diversity import alpha_diversity
 from skbio.stats.composition import clr, multiplicative_replacement
 from sklearn.feature_selection import RFECV, SelectKBest
 from sklearn.model_selection import RepeatedKFold
@@ -33,7 +33,7 @@ def clinical_covariates_selection(X_train, y_train, clinical_covariates):
         verbose = 0
     )
     rfecv.fit(model.pipeline[0].fit_transform(X_train.loc[:,features], y_train), y_train)
-    features = [el.rsplit('__')[1] for el in rfecv.get_feature_names_out()]
+    features = features[rfecv.support_]
     output = np.union1d(features, other_features)
     return output
 

@@ -14,7 +14,7 @@ random.seed(10)
 arguments = sys.argv
 
 ############################################################
-arguments = [0, '/home/tristan/Desktop/Repos/DreamHF']
+#arguments = [0, '/home/tristan/Desktop/Repos/DreamHF']
 ############################################################
 
 

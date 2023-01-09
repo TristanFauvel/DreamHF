@@ -14,11 +14,7 @@ from sklearn.decomposition import PCA
 from sklearn.feature_selection import SelectKBest
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import make_scorer
-from sklearn.model_selection import (
-    RandomizedSearchCV,
-    RepeatedKFold,
-    RepeatedStratifiedKFold,
-)
+from sklearn.model_selection import RandomizedSearchCV, RepeatedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, MinMaxScaler, StandardScaler
 from sklearn.utils import estimator_html_repr
@@ -27,12 +23,10 @@ from sksurv.ensemble import GradientBoostingSurvivalAnalysis
 from sksurv.linear_model import CoxnetSurvivalAnalysis, CoxPHSurvivalAnalysis, IPCRidge
 from sksurv.metrics import concordance_index_censored
 from xgbse import XGBSEStackedWeibull
-from xgbse.converters import convert_y
 from xgbse.metrics import concordance_index
 
 from xgboost_wrapper import XGBSurvival
 
-sklearn.set_config(transform_output="pandas")
 
 def bind(instance, method):
     def binding_scope_fn(*args, **kwargs):
@@ -97,14 +91,6 @@ class EarlyStoppingMonitor:
         # in last max_iter_without_improvement iterations
         diff = iteration - self._best_step
         return diff >= self.max_iter_without_improvement
-    
-"""
-def score(self, X, y):
-    survival_prob = self.predict(X)
-    risk_score = -survival_prob
-    event, time = convert_y(y)
-    return concordance_index_censored(event, time, risk_score)[0]
-"""
 
 def xgb_risk_score(model, X_test):  # OK for models in sksurv which predict the risk score
     # Predict the survival time, take the negative to convert to risk scores
@@ -112,8 +98,10 @@ def xgb_risk_score(model, X_test):  # OK for models in sksurv which predict the 
     scaler = MinMaxScaler()
     risk_score = scaler.fit_transform(predictions.reshape(-1, 1))
     #The range of this number has to be between 0 and 1, with larger numbers being associated with higher probability of having HF. The values, -Inf, Inf and NA, are not allowed.
-    return risk_score.to_numpy().flatten()
-
+    if not isinstance(risk_score, np.ndarray):
+        risk_score = risk_score.to_numpy()
+    risk_score = risk_score.flatten()  
+    return risk_score
 
 class candidate_model:
     def __init__(self, n_taxa):
@@ -210,7 +198,14 @@ class sksurv_model(candidate_model):
         else:
             predictions = self.pipeline.predict(X_test)  # Predict the risk score
             scaler = MinMaxScaler()
-            risk_score = scaler.fit_transform(predictions.reshape(-1, 1)).to_numpy().flatten()
+            
+            risk_score = scaler.fit_transform(predictions.reshape(-1, 1))
+            
+        if not isinstance(risk_score, np.ndarray):
+            risk_score = risk_score.to_numpy()
+             
+        risk_score = risk_score.flatten()  
+        
             #The range of this number has to be between 0 and 1, with larger numbers being associated with higher probability of having HF. The values, -Inf, Inf and NA, are not allowed.
         return risk_score 
     
