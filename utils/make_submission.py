@@ -10,12 +10,11 @@ from dotenv import load_dotenv
 from synapseclient import File
 
 load_dotenv()
-ROOT = os.environ.get("root_folder")
+ROOT = os.environ.get("ROOT_FOLDER")
 
 submission_type = ".sif"
 submission_name = os.environ.get("submission_name")
-
-submission_name = 'TristanF_Submission_5'
+submission_name = 'TristanF_Submission_2'
 print(submission_name)
 #%%
 # Save everything in a submission_name folder in order to keep track of submissions

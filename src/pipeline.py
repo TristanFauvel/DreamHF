@@ -21,9 +21,10 @@ from survival_models import (
     xgbse_weibull,
 )
 
-#sklearn.set_config(transform_output="pandas")
+sklearn.set_config(transform_output="pandas")
 
-def postprocessing(preds, sample_ids, root, filename):
+
+def postprocessing(preds, sample_ids, root, filename, submission_name):
     # Check that the predictions do not contain NaN, +inf or -inf
     if np.any(np.isnan(preds)) or np.any(np.isinf(preds)):
         raise ValueError("Predictions contain invalid values (NaN or inf)")
@@ -31,7 +32,12 @@ def postprocessing(preds, sample_ids, root, filename):
     # Save results 
     results = pd.DataFrame({"Score": preds}, index=sample_ids)
     results.index.name = "SampleID"
-    outdir = root + "/output/"
+    
+    if root == '/home/tristan/Desktop/Repos/DreamHF':
+        outdir = root + "/output/"
+    else:
+        outdir = root + '/' + submission_name + "/output/"
+        
     p = pathlib.Path(outdir)
     p.mkdir(parents=True, exist_ok=True)
 
@@ -39,8 +45,12 @@ def postprocessing(preds, sample_ids, root, filename):
 
 
 
-def test_output_csv(root, y_train, n_test):
-    outdir = root + "/output/"
+def test_output_csv(root, y_train, n_test, submission_name):
+    if root == '/home/tristan/Desktop/Repos/DreamHF':
+        outdir = root + "/output/"
+    else:
+        outdir = root + '/' + submission_name + "/output/"
+
     risk_scores_train = pd.read_csv(outdir + "scores_train.csv")
     risk_scores_train = risk_scores_train.set_index('SampleID')
     harrell_C_training = concordance_index_censored(
@@ -61,8 +71,7 @@ def test_output_csv(root, y_train, n_test):
        raise AssertionError("Incorrect number of test cases in the output file")
 
 
-
-def experiment_pipeline(pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, ROOT):
+def experiment_pipeline(n_taxa, n_iter, pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, ROOT, submission_name):
 
     processing = 'MI_clr'
     clinical_covariates = ['Age',
@@ -75,7 +84,6 @@ def experiment_pipeline(pheno_df_train, pheno_df_test, readcounts_df_train, read
                            'SystolicBP',
                            'NonHDLcholesterol',
                            'Sex']  # CLINICAL_COVARIATES
-    n_taxa = 0
     
     if processing == 'Salosensaari':
         X_train, X_test, y_train, y_test, test_sample_ids, train_sample_ids = Salosensaari_processing(
@@ -103,17 +111,16 @@ def experiment_pipeline(pheno_df_train, pheno_df_test, readcounts_df_train, read
             #filename = 'trained_model.sav'
             #pickle.dump(model, open(filename, 'wb'))
     """
-    best_model = 'CoxPH' #'sksurv_gbt'
-    n_iter = 10 #400
-    
+    best_model = 'sksurv_gbt'
+       
     n_test = pheno_df_test.shape[0]
-    model = run_experiment(best_model, n_taxa, n_iter, X_train, X_test, y_train, test_sample_ids, train_sample_ids, ROOT, n_test)
+    model = run_experiment(best_model, n_taxa, n_iter, X_train, X_test, y_train, test_sample_ids, train_sample_ids, ROOT, n_test, submission_name)
     # %%
     print("Task completed.")
     return
 
 
-def run_experiment(model_name, n_taxa, n_iter, X_train, X_test, y_train, test_sample_ids, train_sample_ids, ROOT, n_test):
+def run_experiment(model_name, n_taxa, n_iter, X_train, X_test, y_train, test_sample_ids, train_sample_ids, ROOT, n_test, submission_name):
 
     config = dict(
         # xgbse_weibull, sksurv_gbt, xgb_aft, xgb_optuna, CoxPH
@@ -150,12 +157,13 @@ def run_experiment(model_name, n_taxa, n_iter, X_train, X_test, y_train, test_sa
     model = model.cross_validation(X_train, y_train, n_iter)
 
     preds_test = model.risk_score(X_test)    
-    postprocessing(preds_test, test_sample_ids, ROOT, "scores.csv")
+    postprocessing(preds_test, test_sample_ids, ROOT, "scores.csv", submission_name)
                    
     preds_train = model.risk_score(X_train)    
-    postprocessing(preds_train, train_sample_ids, ROOT, "scores_train.csv")
+    postprocessing(preds_train, train_sample_ids, ROOT,
+                   "scores_train.csv", submission_name)
     
-    test_output_csv(ROOT, y_train, n_test)
+    test_output_csv(ROOT, y_train, n_test, submission_name)
     
     run.finish()
     return model
