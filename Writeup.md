@@ -12,13 +12,7 @@ See <https://www.synapse.org/#!Synapse:syn27130803/wiki/616705>
 
 ### Source code
 
-The source code to reproduce the results is available at <https://github.com/TristanFauvel/DreamHF>
-
-
-
-
-Authors
-Affiliations
+The source code to reproduce the results will be made available at <https://github.com/TristanFauvel/DreamHF>
 
 * Will you be able to make your submission public as part of the challenge archive? Yes
 
@@ -26,7 +20,7 @@ Affiliations
 ##Summary Sentence
 *(suggested limit 30 words)*
 
-Include 1 short sentence description of your method that can be used in a main text table.
+A Cox Proportional Hazards model based on selected clinical covariates and gut microbiome alpha diversity to predict the risk of heart failure.
 
 ##Background/Introduction
 *(suggested limit 200 words)*

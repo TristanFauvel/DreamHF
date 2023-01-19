@@ -11,7 +11,7 @@ from sklearn import model_selection
 from sklearn.compose import ColumnTransformer
 from sklearn.compose import make_column_selector as selector
 from sklearn.decomposition import PCA
-from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import RFE, SelectKBest
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import make_scorer
 from sklearn.model_selection import RandomizedSearchCV, RepeatedKFold
@@ -19,7 +19,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, MinMaxScaler, StandardScaler
 from sklearn.utils import estimator_html_repr
 from sklearn.utils.validation import check_is_fitted
-from sksurv.ensemble import GradientBoostingSurvivalAnalysis
+from sksurv.ensemble import GradientBoostingSurvivalAnalysis, RandomSurvivalForest
 from sksurv.linear_model import CoxnetSurvivalAnalysis, CoxPHSurvivalAnalysis, IPCRidge
 from sksurv.metrics import concordance_index_censored
 from xgbse import XGBSEStackedWeibull
@@ -106,7 +106,7 @@ def xgb_risk_score(model, X_test):  # OK for models in sksurv which predict the 
 class candidate_model:
     def __init__(self, n_taxa):
         self.n_taxa = n_taxa
-        self.cv = 5
+        self.cv = 10
         if n_taxa > 0:
             self.base_distribution = dict(pca_transformer__reduce_dim=[
                 'passthrough', PCA(0.95), PCA(0.98)])
@@ -119,7 +119,7 @@ class candidate_model:
             self.distributions,
             random_state=0,
             n_iter=n_iter,
-            n_jobs=1,
+            n_jobs=-1,
             verbose=10,
             #error_score='raise',
             cv = self.cv
@@ -169,6 +169,7 @@ class candidate_model:
             ]
         )
         
+        """ 
         if self.n_taxa >0:
             pca_transformer = ColumnTransformer(
                 transformers=[("reduce_dim", PCA(), selector(pattern="k__"))], remainder='passthrough')
@@ -178,7 +179,15 @@ class candidate_model:
         else:
             regressor = Pipeline(
                 steps=[("preprocessor", preprocessor), ("estimator", self.estimator)])
-
+        """      
+        rfe = RFE(estimator=self.estimator, n_features_to_select=50, step = 0.1)
+        
+        feature_selector = Pipeline(
+            steps=[("preprocessor", preprocessor), ("rfe", rfe)])
+        
+        regressor = Pipeline(
+            steps=[("feature_selector", feature_selector), ("estimator", self.estimator)])
+        
         # Scale predictions : predictions are risk score between 0 and 1
                 
         with open("regressor.html", "w") as f:
@@ -230,11 +239,31 @@ class sksurv_gbt(sksurv_model):
         )}
 
 
+class sksurv_RF(sksurv_model):
+    def __init__(self, n_taxa):
+        super().__init__(n_taxa)
+
+        self.estimator = RandomSurvivalForest(n_estimators=1000,
+                                              min_samples_split=10,
+                                              min_samples_leaf=15,
+                                              n_jobs=-1,
+                                              random_state=1)
+
+        self.pipeline = self.create_pipeline()
+
+        self.distributions = {**self.base_distribution, **dict(
+            estimator__n_estimators=randint(400, 1000),
+            estimator__min_samples_split=randint(2, 20),
+            estimator__min_samples_leaf=randint(1, 20),
+        )}
+
+
+
 class CoxPH(sksurv_model):
     def __init__(self, n_taxa):
         super().__init__(n_taxa)
          
-        self.cv = 10
+        self.cv = RepeatedKFold(n_splits = 10, n_repeats = 10)
         self.estimator = CoxPHSurvivalAnalysis(alpha = 0.1,
             ties='breslow', tol=1e-09, verbose=0)
 

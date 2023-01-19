@@ -5,7 +5,6 @@ import warnings
 
 import numpy as np
 import pandas as pd
-import sklearn
 from sksurv.metrics import concordance_index_censored
 
 import wandb
@@ -20,8 +19,6 @@ from survival_models import (
     xgb_optuna,
     xgbse_weibull,
 )
-
-sklearn.set_config(transform_output="pandas")
 
 
 def postprocessing(preds, sample_ids, root, filename, submission_name):
@@ -111,7 +108,7 @@ def experiment_pipeline(n_taxa, n_iter, pheno_df_train, pheno_df_test, readcount
             #filename = 'trained_model.sav'
             #pickle.dump(model, open(filename, 'wb'))
     """
-    best_model = 'sksurv_gbt'
+    best_model = 'CoxPH'
        
     n_test = pheno_df_test.shape[0]
     model = run_experiment(best_model, n_taxa, n_iter, X_train, X_test, y_train, test_sample_ids, train_sample_ids, ROOT, n_test, submission_name)

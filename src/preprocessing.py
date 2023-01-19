@@ -20,7 +20,7 @@ CLINICAL_COVARIATES = ['Age', 'BodyMassIndex', 'Smoking', 'BPTreatment', 'Preval
 def clinical_covariates_selection(X_train, y_train, clinical_covariates):     
     min_features_to_select = 1  # Minimum number of features to consider    
     model = CoxPH(0)
-    cv = RepeatedKFold(n_splits = 10, n_repeats = 10)
+    cv = RepeatedKFold(n_splits = 10, n_repeats = 30)
 
     features = np.intersect1d(clinical_covariates, X_train.columns)
     other_features = np.setxor1d(clinical_covariates, X_train.columns)
@@ -43,6 +43,12 @@ def relative_abundance(readcounts_df):
     total = readcounts_df.sum(axis=1)
     proportions_df = readcounts_df.divide(total, axis="rows")
     return proportions_df
+
+def taxa_presence(readcounts_df):
+    total = readcounts_df.sum(axis=1)
+    df_proportions = readcounts_df.divide(total, axis="rows")
+    presence = (df_proportions > 1e-5)
+    return presence
 
 def _pheno_processing_pipeline(df, training) -> pd.DataFrame:
     df = df.convert_dtypes()
@@ -85,19 +91,36 @@ def _remove_unique_columns(df_train, df_test) -> Tuple[pd.DataFrame, pd.DataFram
     return df_train, df_test
 
 
-def load_data(root):
+def load_data(root, scoring = False):
     # Load data from files
     pheno_df_train = pd.read_csv(root + "/train/pheno_training.csv")
     pheno_df_train = _pheno_processing_pipeline(pheno_df_train, training=True)
 
     pheno_df_test = pd.read_csv(root + "/test/pheno_test.csv")
-    pheno_df_test = _pheno_processing_pipeline(pheno_df_test, training=False)
-
+    pheno_df_test = _pheno_processing_pipeline(pheno_df_test, training=True)
+    
     readcounts_df_train = pd.read_csv(root + "/train/readcounts_training.csv")
     readcounts_df_train = _readcounts_processing_pipeline(readcounts_df_train)
-
+    
     readcounts_df_test = pd.read_csv(root + "/test/readcounts_test.csv")
     readcounts_df_test = _readcounts_processing_pipeline(readcounts_df_test)
+    
+    if scoring:
+        pheno_df_scoring = pd.read_csv(root + "/scoring/pheno_scoring.csv")
+        pheno_df_scoring = _pheno_processing_pipeline(
+            pheno_df_scoring, training=False)
+
+        readcounts_df_scoring = pd.read_csv(
+            root + "/scoring/readcounts_scoring.csv")
+        readcounts_df_scoring = _readcounts_processing_pipeline(
+            readcounts_df_scoring)
+
+        pheno_df_train = pd.concat([pheno_df_train, pheno_df_test])
+        pheno_df_test = pheno_df_scoring
+
+        readcounts_df_train = pd.concat([readcounts_df_train, readcounts_df_test])
+        readcounts_df_test = readcounts_df_scoring
+
 
     # Remove unique columns from the readcounts data
     readcounts_df_train, readcounts_df_test = _remove_unique_columns(
@@ -185,9 +208,8 @@ def _taxa_aggregation(readcounts_df, taxonomic_level="s__") -> pd.DataFrame:
 
 
 def _taxa_filtering(readcounts_df):
-    ## Select genus-level taxonomic groups that were detected in >1% of the study participants at a within-sample relative abundance of >0.1%.
-    total = readcounts_df.sum(axis=1)
-    df_proportions = readcounts_df.divide(total, axis="rows")
+    ## Select species-level taxonomic groups that were detected in >1% of the study participants at a within-sample relative abundance of >0.1%. 
+    df_proportions  = relative_abundance(readcounts_df)
     selection = (df_proportions > 0.001).mean(axis=0) > 0.01
     readcounts_df = readcounts_df.loc[:, selection]
 
@@ -243,10 +265,20 @@ def Salosensaari_processing(
 
 def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates, n_taxa):      
     
+    adiv_train = diversity_metrics(
+        readcounts_df_train, 'observed_otus').astype('float64')
+    adiv_test = diversity_metrics(
+        readcounts_df_test, 'observed_otus').astype('float64')
+
+    """
     if n_taxa > 0:
         taxa = taxa_selection(pheno_df_train, readcounts_df_train, n_taxa)
     else :
         taxa= None  
+    """
+    
+    readcounts_df_train = taxa_presence(readcounts_df_train)
+    readcounts_df_test = taxa_presence(readcounts_df_test)
            
     if any(np.setdiff1d(clinical_covariates, CLINICAL_COVARIATES)):
         raise(ValueError('One of the clinical covariates is not in the prespecified list'))
@@ -261,12 +293,7 @@ def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcount
     pheno_df_test = pheno_df_test.loc[:, list(clinical_covariates)+
         event_test]
     
-    
-    adiv_train = diversity_metrics(readcounts_df_train, 'observed_otus').astype('float64')
-    adiv_test = diversity_metrics(readcounts_df_test, 'observed_otus').astype('float64')
-    #shannon_train = diversity_metrics(readcounts_df_train, 'shannon')
-    #shannon_test = diversity_metrics(readcounts_df_test, 'shannon')
-    
+    """
     if taxa is None:
         df_train = pheno_df_train
         df_test = pheno_df_test
@@ -276,6 +303,10 @@ def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcount
        
         df_train = pheno_df_train.join(df_clr_train.loc[:,taxa])
         df_test = pheno_df_test.join(df_clr_test.loc[:,taxa])  
+    """
+    df_train = pheno_df_train.join(readcounts_df_train)
+    df_test = pheno_df_test.join(readcounts_df_test)  
+    
     df_train['adiv'] = adiv_train
     df_test['adiv'] = adiv_test
     #df_train['shannon'] = shannon_train
@@ -289,11 +320,10 @@ def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcount
     )
     
     ## Select the features using a coxPH model
-    """
     features = clinical_covariates_selection(X_train, y_train, clinical_covariates)
     X_train = X_train.loc[:, features]
     X_test = X_test.loc[:,features]
-    """
+    
     return X_train, X_test, y_train, y_test, test_sample_ids, train_sample_ids
 
 
