@@ -20,7 +20,7 @@ CLINICAL_COVARIATES = ['Age', 'BodyMassIndex', 'Smoking', 'BPTreatment', 'Preval
 def clinical_covariates_selection(X_train, y_train, clinical_covariates):     
     min_features_to_select = 1  # Minimum number of features to consider    
     model = CoxPH(0)
-    cv = RepeatedKFold(n_splits = 10, n_repeats = 30)
+    cv = RepeatedKFold(n_splits = 10, n_repeats = 20)
 
     features = np.intersect1d(clinical_covariates, X_train.columns)
     other_features = np.setxor1d(clinical_covariates, X_train.columns)
@@ -270,15 +270,15 @@ def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcount
     adiv_test = diversity_metrics(
         readcounts_df_test, 'observed_otus').astype('float64')
 
-    """
+    
     if n_taxa > 0:
         taxa = taxa_selection(pheno_df_train, readcounts_df_train, n_taxa)
     else :
         taxa= None  
-    """
     
-    readcounts_df_train = taxa_presence(readcounts_df_train)
-    readcounts_df_test = taxa_presence(readcounts_df_test)
+    
+    #readcounts_df_train = taxa_presence(readcounts_df_train)
+    #readcounts_df_test = taxa_presence(readcounts_df_test)
            
     if any(np.setdiff1d(clinical_covariates, CLINICAL_COVARIATES)):
         raise(ValueError('One of the clinical covariates is not in the prespecified list'))
@@ -293,7 +293,7 @@ def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcount
     pheno_df_test = pheno_df_test.loc[:, list(clinical_covariates)+
         event_test]
     
-    """
+    
     if taxa is None:
         df_train = pheno_df_train
         df_test = pheno_df_test
@@ -303,14 +303,10 @@ def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcount
        
         df_train = pheno_df_train.join(df_clr_train.loc[:,taxa])
         df_test = pheno_df_test.join(df_clr_test.loc[:,taxa])  
-    """
-    df_train = pheno_df_train.join(readcounts_df_train)
-    df_test = pheno_df_test.join(readcounts_df_test)  
+    
     
     df_train['adiv'] = adiv_train
     df_test['adiv'] = adiv_test
-    #df_train['shannon'] = shannon_train
-    #df_test['shannon'] = shannon_test
         
     covariates = df_train.loc[
             :, (df_train.columns != "Event") & (df_train.columns != "Event_time")

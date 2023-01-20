@@ -23,7 +23,7 @@ import sklearn
 #- choose n_taxa and n_iter
 
 ############################################################
-arguments = [0, '/home/tristan/Desktop/Repos/DreamHF']
+#arguments = [0, '/home/tristan/Desktop/Repos/DreamHF']
 ############################################################
 
 submission_name = "TristanF_Final_Submission"
@@ -44,7 +44,7 @@ pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test = load_da
 print("Data loaded. ")
 
 n_taxa = 0
-n_iter = 10 #Number of hyperaparameters to test
+n_iter = 1000 #Number of hyperaparameters to test
 
 # %%
 experiment_pipeline(n_taxa, n_iter, pheno_df_train, pheno_df_test,

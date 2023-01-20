@@ -107,7 +107,7 @@ class candidate_model:
     def __init__(self, n_taxa):
         self.n_taxa = n_taxa
               
-        self.cv = RepeatedKFold(n_splits = 5, n_repeats = 5)
+        self.cv = RepeatedKFold(n_splits = 10, n_repeats = 10)
         
         if n_taxa > 0:
             self.base_distribution = dict(pca_transformer__reduce_dim=[
