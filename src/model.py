@@ -26,7 +26,7 @@ import sklearn
 arguments = [0, '/home/tristan/Desktop/Repos/DreamHF']
 ############################################################
 
-submission_name = "TristanF_Submission_scoring"
+submission_name = "TristanF_Final_Submission"
 
 scoring = True
 
@@ -44,7 +44,9 @@ pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test = load_da
 print("Data loaded. ")
 
 n_taxa = 0
-n_iter = 3 #Number of hyperaparameters to test
+n_iter = 10 #Number of hyperaparameters to test
+
+# %%
 experiment_pipeline(n_taxa, n_iter, pheno_df_train, pheno_df_test,
                     readcounts_df_train, readcounts_df_test, ROOT, submission_name)
 

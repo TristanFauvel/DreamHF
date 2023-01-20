@@ -14,7 +14,7 @@ ROOT = os.environ.get("ROOT_FOLDER")
 
 submission_type = ".sif"
 submission_name = os.environ.get("submission_name")
-submission_name = 'TristanF_Submission_2'
+submission_name = "TristanF_Final_Submission"
 print(submission_name)
 #%%
 # Save everything in a submission_name folder in order to keep track of submissions
