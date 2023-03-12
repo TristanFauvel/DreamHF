@@ -70,15 +70,14 @@ class _ExtentedStepFunction:
 
 
 def HosmerLemeshowSurvival(times, model, X_test, y_test, df=2, Q=10):
-
     """
     df = 2 # Cook-Ridler test
     df = 1 # D'Agostino-Nam test
     """
-    
+
     if isinstance(times, int):
         times = np.array([times])
-    
+
     nt = times.shape[0]
 
     predictions = model.predict_survival_function(X_test)
@@ -91,10 +90,11 @@ def HosmerLemeshowSurvival(times, model, X_test, y_test, df=2, Q=10):
         pred_surv_prob[:, -1],
         np.percentile(pred_surv_prob[:, -1], np.linspace(0, 100, Q + 1)),
         labels=False,
-        include_lowest=True, 
-        duplicates = 'drop'
+        include_lowest=True,
+        duplicates='drop'
     )
-    Q = categories.max() # In case where there are duplicate edges, recompute the effective number of groups
+    # In case where there are duplicate edges, recompute the effective number of groups
+    Q = categories.max()
     expevents = np.zeros((Q, nt))
     obsevents = np.zeros((Q, nt))
     pi = np.zeros((Q, nt))
@@ -110,11 +110,12 @@ def HosmerLemeshowSurvival(times, model, X_test, y_test, df=2, Q=10):
         expevents[i, :] = (1 - pred_surv_prob[categories == i, :]).sum(axis=0)
         pi[i, :] = expevents[i, :] / ni
 
-    chisq_value = np.sum((obsevents - expevents) ** 2 / (expevents * (1 - pi)), axis=0)
+    chisq_value = np.sum((obsevents - expevents) ** 2 /
+                         (expevents * (1 - pi)), axis=0)
     pvalue = 1 - chi2.cdf(chisq_value, Q - df)
 
     if nt == 1:
         chisq_value = chisq_value[0]
-        pvalue = pvalue[0]   
-    
-    return {'chisq_value': chisq_value, 'pvalue':pvalue}
+        pvalue = pvalue[0]
+
+    return {'chisq_value': chisq_value, 'pvalue': pvalue}
