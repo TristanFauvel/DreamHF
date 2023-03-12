@@ -17,24 +17,30 @@ CLINICAL_COVARIATES = ['Age', 'BodyMassIndex', 'Smoking', 'BPTreatment', 'Preval
                        'NonHDLcholesterol', 'Sex']
 
 
-def clinical_covariates_selection(x_train, y_train, clinical_covariates):
-    """_summary_
+def clinical_covariates_selection(x_train: pd.DataFrame, y_train: pd.Series, clinical_covariates: np.ndarray) -> np.ndarray:
+    """
+    Select the clinical covariates using Recursive Feature Elimination (RFE) with cross-validation.
 
     Args:
-        x_train (_type_): _description_
-        y_train (_type_): _description_
-        clinical_covariates (_type_): _description_
+        x_train (pd.DataFrame): The training set.
+        y_train (pd.Series): The target variable of the training set.
+        clinical_covariates (np.ndarray): The array containing the clinical covariates to consider.
 
     Returns:
-        _type_: _description_
-    """   
-    
+        np.ndarray: The selected clinical covariates.
+
+    """
     min_features_to_select = 1  # Minimum number of features to consider
     model = CoxPH(0)
     cv = RepeatedKFold(n_splits=10, n_repeats=20)
 
+    # Get the common features between clinical_covariates and x_train
     features = np.intersect1d(clinical_covariates, x_train.columns)
+
+    # Get the features that are not in clinical_covariates
     other_features = np.setxor1d(clinical_covariates, x_train.columns)
+
+    # Define the RFECV object
     rfecv = RFECV(
         estimator=model.pipeline[1],
         step=1,
@@ -43,69 +49,82 @@ def clinical_covariates_selection(x_train, y_train, clinical_covariates):
         n_jobs=-1,
         verbose=0
     )
+
+    # Fit the RFECV object to the training set
     rfecv.fit(model.pipeline[0].fit_transform(
         x_train.loc[:, features], y_train), y_train)
+
+    # Get the selected features and add the other features to the output
     features = features[rfecv.support_]
     output = np.union1d(features, other_features)
     return output
 
 
-def relative_abundance(readcounts_df):
-    """_summary_
+def relative_abundance(readcounts_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute the relative abundance of each taxon in each sample.
 
     Args:
-        readcounts_df (_type_): _description_
+        readcounts_df (pd.DataFrame): The DataFrame containing the read counts.
 
     Returns:
-        _type_: _description_
-    """    
+        pd.DataFrame: The DataFrame containing the relative abundance of each taxon.
+
+    """
     total = readcounts_df.sum(axis=1)
     proportions_df = readcounts_df.divide(total, axis="rows")
     return proportions_df
 
 
-def taxa_presence(readcounts_df):
-    """_summary_
+def taxa_presence(readcounts_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Determine if each taxon is present or absent in each sample.
 
     Args:
-        readcounts_df (_type_): _description_
+        readcounts_df (pd.DataFrame): The DataFrame containing the read counts.
 
     Returns:
-        _type_: _description_
-    """    
+        pd.DataFrame: The DataFrame containing the presence (True) or absence (False) of each taxon.
+
+    """
     total = readcounts_df.sum(axis=1)
     df_proportions = readcounts_df.divide(total, axis="rows")
     presence = (df_proportions > 1e-5)
     return presence
 
 
-def _pheno_processing_pipeline(df, training) -> pd.DataFrame:
-    """_summary_
+def _pheno_processing_pipeline(df: pd.DataFrame, training: bool) -> pd.DataFrame:
+    """
+    Process pheno dataframe by dropping rows with missing data, converting the data types of certain columns, 
+    and setting the index.
 
     Args:
-        df (_type_): _description_
-        training (_type_): _description_
+        df (pd.DataFrame): Dataframe to be processed
+        training (bool): Whether or not the dataframe is from the training set
 
     Returns:
-        pd.DataFrame: _description_
-    """    
+        pd.DataFrame: Processed dataframe
+    """
+    # Convert data types of columns
     df = df.convert_dtypes()
 
+    # Drop rows with missing data for 'Event' and set type to boolean
     if "Event" in df:
         df.dropna(subset=["Event"], inplace=True)
         df = df.astype({"Event": "bool"})
 
+    # Drop rows with missing data for 'Event_time' and set type to float64
     if "Event_time" in df:
         df.dropna(subset=["Event_time"], inplace=True)
         df = df.astype({"Event_time": "float64"})
 
-    # df = df.astype({'Smoking': 'category', 'PrevalentCHD': 'category', 'BPTreatment': 'category', 'PrevalentDiabetes': 'category', 'PrevalentHFAIL': 'category',
-        # 'Sex': 'category', 'Event': 'category'})
-
+    # Set index to column with label 'Unnamed: 0'
     df.set_index("Unnamed: 0", inplace=True)
 
+    # Rename index and columns for clarity
     df = df.rename_axis(index=None, columns=df.index.name)
 
+    # Remove rows with negative Event_time values in the training set (artifacts)
     if training:
         artifacts = (df["Event_time"] < 0) & (df["Event"] == 1)
         df = df.loc[~artifacts, :]
@@ -113,33 +132,44 @@ def _pheno_processing_pipeline(df, training) -> pd.DataFrame:
     return df
 
 
-def _readcounts_processing_pipeline(df) -> pd.DataFrame:
-    """_summary_
+def _readcounts_processing_pipeline(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Process readcounts dataframe by transposing, renaming columns, dropping labels, and converting data types.
 
     Args:
-        df (_type_): _description_
+        df (pd.DataFrame): Dataframe to be processed
 
     Returns:
-        pd.DataFrame: _description_
-    """    
+        pd.DataFrame: Processed dataframe
+    """
+    # Transpose dataframe
     df = df.transpose()
+
+    # Rename columns to be first row of dataframe
     df.columns = df.iloc[0]
+
+    # Drop row with label 'Unnamed: 0'
     df = df.drop(labels=["Unnamed: 0"], axis=0)
+
+    # Convert data types of columns to int64
     df = df.astype(np.int64)
+
     return df
 
 
-def _remove_unique_columns(df_train, df_test) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """_summary_
+def _remove_unique_columns(df_train: pd.DataFrame, df_test: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Remove columns in both training and testing sets with only one unique value.
 
     Args:
-        df_train (_type_): _description_
-        df_test (_type_): _description_
+        df_train (pd.DataFrame): Training set
+        df_test (pd.DataFrame): Testing set
 
     Returns:
-        Tuple[pd.DataFrame, pd.DataFrame]: _description_
-    """    
+        Tuple[pd.DataFrame, pd.DataFrame]: Tuple containing modified training and testing sets
+    """
     for col in df_test.columns:
+        # If column has only one unique value in both training and testing sets, drop column
         if len(df_test[col].unique()) == 1 and len(df_train[col].unique()) == 1:
             df_test.drop(col, inplace=True, axis=1)
             df_train.drop(col, inplace=True, axis=1)
@@ -147,15 +177,18 @@ def _remove_unique_columns(df_train, df_test) -> Tuple[pd.DataFrame, pd.DataFram
 
 
 def load_data(root, scoring=False):
-    """_summary_
+    """
+    Load data from CSV files.
 
     Args:
-        root (_type_): _description_
-        scoring (bool, optional): _description_. Defaults to False.
+        root (str): Path to directory containing the CSV files.
+        scoring (bool, optional): If True, return data for scoring. Defaults to False.
 
     Returns:
-        _type_: _description_
-    """    
+        tuple: Tuple containing four DataFrames in the following order: 
+            pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test
+    """
+
     # Load data from files
     pheno_df_train = pd.read_csv(root + "/train/pheno_training.csv")
     pheno_df_train = _pheno_processing_pipeline(pheno_df_train, training=True)
@@ -220,9 +253,15 @@ def load_data(root, scoring=False):
 
 
 def remove_invalid_characters(df):
-    # To avoid the ValueError: feature_names must be string, and may not contain[, ] or < when using XGBoost
-    # df.columns = df.columns.str.replace(
-    #    r"[[]><]", "")
+    """
+    Removes invalid characters from DataFrame column names to avoid errors in XGBoost.
+    
+    Args:
+        df (pandas.DataFrame): DataFrame with column names to be cleaned.
+    
+    Returns:
+        pandas.DataFrame: DataFrame with cleaned column names.
+    """
     invalid_characters = ['[', ']', '>', '<']
     for character in invalid_characters:
         df.columns = [col.replace(character, '') for col in df.columns]
@@ -230,7 +269,24 @@ def remove_invalid_characters(df):
 
 
 def _prepare_train_test(df_train: pd.DataFrame, df_test: pd.DataFrame, covariates):
-    # Left truncation : we remove all participants who experienced HF before entering the study.
+    """
+    Prepares the training and testing datasets for the model by selecting relevant columns and removing invalid values.
+    
+    Args:
+        df_train (pandas.DataFrame): DataFrame containing the training data.
+        df_test (pandas.DataFrame): DataFrame containing the testing data.
+        covariates (list): List of column names to be used as features for the model.
+    
+    Returns:
+        tuple: A tuple containing the following:
+            pandas.DataFrame: DataFrame containing the training data.
+            pandas.DataFrame: DataFrame containing the testing data.
+            numpy.ndarray: Array containing the training labels.
+            numpy.ndarray: Array containing the testing labels.
+            pandas.Index: Index of the samples in the testing data.
+            pandas.Index: Index of the samples in the training data.
+    """
+    # Left truncation: we remove all participants who experienced HF before entering the study.
     selection_train = df_train.loc[:, "Event_time"] >= -np.inf  # 0
 
     test_sample_ids = df_test.index
@@ -256,7 +312,16 @@ def _prepare_train_test(df_train: pd.DataFrame, df_test: pd.DataFrame, covariate
 
 
 def _check_data(df: pd.DataFrame) -> pd.DataFrame:
-    # Check that the input data do not contain NaN
+    """
+    Checks the input data for NaN values and deletes any rows with missing values.
+    
+    Args:
+        df (pandas.DataFrame): DataFrame to be checked.
+    
+    Returns:
+        pandas.DataFrame: DataFrame with missing values removed.
+    """
+    # Check that the input data does not contain NaN
     nan_cols = df.isnull().values.any(axis=0)
     nan_counts = df.isnull().values.sum(axis=0)
     for nan, column, nan_c in zip(nan_cols, df.columns, nan_counts):
@@ -273,17 +338,17 @@ def _check_data(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _taxa_aggregation(readcounts_df, taxonomic_level="s__") -> pd.DataFrame:
-    # Aggregate the species into genus
-    readcounts_df.columns = [
-        el.split(taxonomic_level)[0] for el in readcounts_df.columns
-    ]
-    readcounts_df = readcounts_df.groupby(readcounts_df.columns, axis=1).sum()
-    return readcounts_df
-
-
 def _taxa_filtering(readcounts_df):
-    # Select species-level taxonomic groups that were detected in >1% of the study participants at a within-sample relative abundance of >0.1%.
+    """
+    Select species-level taxonomic groups that were detected in >1% of the study participants at a within-sample relative 
+    abundance of >0.1%.
+    
+    Args:
+    - readcounts_df: pandas.DataFrame. The input dataframe containing the read counts data.
+    
+    Returns:
+    - selection: pandas.Series. A boolean series that indicates which species-level taxonomic groups are selected.
+    """
     df_proportions = relative_abundance(readcounts_df)
     selection = (df_proportions > 0.001).mean(axis=0) > 0.01
     readcounts_df = readcounts_df.loc[:, selection]
@@ -296,6 +361,15 @@ def _taxa_filtering(readcounts_df):
 
 
 def _centered_log_transform(readcounts_df) -> pd.DataFrame:
+    """
+    Performs centered log transformation on read count data.
+    
+    Args:
+    - readcounts_df: pandas.DataFrame. The input dataframe containing the read counts data.
+    
+    Returns:
+    - df: pandas.DataFrame. The transformed dataframe.
+    """
     # Centered log transformation
     x_mr = multiplicative_replacement(readcounts_df)
 
@@ -310,6 +384,25 @@ def _centered_log_transform(readcounts_df) -> pd.DataFrame:
 def Salosensaari_processing(
     pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates
 ):
+    """
+    Preprocesses data for Salosensaari et al. method. Performs taxa aggregation, filtering, and centered log transformation 
+    on read count data, and prepares train and test data for the Cox proportional hazards model.
+    
+    Args:
+    - pheno_df_train: pandas.DataFrame. The input dataframe containing the clinical data for the training set.
+    - pheno_df_test: pandas.DataFrame. The input dataframe containing the clinical data for the test set.
+    - readcounts_df_train: pandas.DataFrame. The input dataframe containing the read counts data for the training set.
+    - readcounts_df_test: pandas.DataFrame. The input dataframe containing the read counts data for the test set.
+    - clinical_covariates: list of str. The list of clinical covariates to be used in the analysis.
+    
+    Returns:
+    - x_train: pandas.DataFrame. The training data.
+    - x_test: pandas.DataFrame. The test data.
+    - y_train: pandas.Series. The training data labels.
+    - y_test: pandas.Series. The test data labels.
+    - test_sample_ids: list of str. The sample IDs for the test set.
+    - train_sample_ids: list of str. The sample IDs for the training set.
+    """
 
     if "Event" in pheno_df_test:
         event_test = ["Event", "Event_time"]
@@ -342,23 +435,43 @@ def Salosensaari_processing(
 
 
 def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates, n_taxa):
+    """
+    Performs data processing and feature selection for Cox proportional hazards modeling using centered log-ratio transformation.
 
+    Parameters:
+    - pheno_df_train (pandas.DataFrame): phenotype dataframe for training set
+    - pheno_df_test (pandas.DataFrame): phenotype dataframe for testing set
+    - readcounts_df_train (pandas.DataFrame): read count dataframe for training set
+    - readcounts_df_test (pandas.DataFrame): read count dataframe for testing set
+    - clinical_covariates (list): list of clinical covariates to include in the model
+    - n_taxa (int): number of taxa to include in the model; if 0, no taxa are included
+    
+    Returns:
+    - x_train (pandas.DataFrame): feature matrix for training set
+    - x_test (pandas.DataFrame): feature matrix for testing set
+    - y_train (pandas.Series): event (1) or censoring (0) for training set
+    - y_test (pandas.Series): event (1) or censoring (0) for testing set
+    - test_sample_ids (list): sample IDs for testing set
+    - train_sample_ids (list): sample IDs for training set
+    """
+
+    # Calculate alpha diversity for training and testing set
     adiv_train = diversity_metrics(
         readcounts_df_train, 'observed_otus').astype('float64')
     adiv_test = diversity_metrics(
         readcounts_df_test, 'observed_otus').astype('float64')
 
+    # If n_taxa is specified, perform taxa selection using centered log-ratio transformation
     if n_taxa > 0:
         taxa = taxa_selection(pheno_df_train, readcounts_df_train, n_taxa)
     else:
         taxa = None
 
-    #readcounts_df_train = taxa_presence(readcounts_df_train)
-    #readcounts_df_test = taxa_presence(readcounts_df_test)
-
+    # Check if all clinical covariates are valid
     if any(np.setdiff1d(clinical_covariates, CLINICAL_COVARIATES)):
         raise(ValueError('One of the clinical covariates is not in the prespecified list'))
 
+    # Select relevant columns from phenotype dataframes
     if "Event" in pheno_df_test:
         event_test = ["Event", "Event_time"]
     else:
@@ -399,20 +512,56 @@ def clr_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcount
 
 
 def standard_processing(pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates, taxa=None):
+    """
+    Process and prepare the input data for modeling.
 
+    Parameters:
+    -----------
+    pheno_df_train : pandas.DataFrame
+        DataFrame of clinical phenotype data for the training set.
+    pheno_df_test : pandas.DataFrame
+        DataFrame of clinical phenotype data for the test set.
+    readcounts_df_train : pandas.DataFrame
+        DataFrame of read count data for the training set.
+    readcounts_df_test : pandas.DataFrame
+        DataFrame of read count data for the test set.
+    clinical_covariates : list
+        List of clinical covariates to be included in the modeling.
+    taxa : list or None, default=None
+        List of taxa to be included in the modeling, or None if only clinical covariates should be used.
+
+    Returns:
+    --------
+    x_train : pandas.DataFrame
+        DataFrame of training set predictors.
+    x_test : pandas.DataFrame
+        DataFrame of test set predictors.
+    y_train : pandas.DataFrame
+        DataFrame of training set outcomes.
+    y_test : pandas.DataFrame
+        DataFrame of test set outcomes.
+    test_sample_ids : list
+        List of sample IDs for the test set.
+    train_sample_ids : list
+        List of sample IDs for the training set.
+    """
+    # Check that all specified clinical covariates are valid
     if any(np.setdiff1d(clinical_covariates, CLINICAL_COVARIATES)):
         raise(ValueError('One of the clinical covariates is not in the prespecified list'))
 
+    # Check if the test set includes event data
     if "Event" in pheno_df_test:
         event_test = ["Event", "Event_time"]
     else:
         event_test = []
 
-    pheno_df_train = pheno_df_train.loc[:, list(clinical_covariates) +
-                                        ["Event", "Event_time"]]
-    pheno_df_test = pheno_df_test.loc[:, list(clinical_covariates) +
-                                      event_test]
+    # Select relevant columns from the input DataFrames
+    pheno_df_train = pheno_df_train.loc[:, list(
+        clinical_covariates) + ["Event", "Event_time"]]
+    pheno_df_test = pheno_df_test.loc[:, list(
+        clinical_covariates) + event_test]
 
+    # Merge read count data with the clinical phenotype data, if specified
     if taxa is None:
         df_train = pheno_df_train
         df_test = pheno_df_test
@@ -420,17 +569,29 @@ def standard_processing(pheno_df_train, pheno_df_test, readcounts_df_train, read
         df_train = pheno_df_train.join(readcounts_df_train.loc[:, taxa])
         df_test = pheno_df_test.join(readcounts_df_test.loc[:, taxa])
 
-    covariates = df_train.loc[
-        :, (df_train.columns != "Event") & (df_train.columns != "Event_time")
-    ].columns
+    # Extract covariate columns for modeling
+    covariates = df_train.loc[:, (df_train.columns != "Event") & (
+        df_train.columns != "Event_time")].columns
+
+    # Split the data into training and test sets
     x_train, x_test, y_train, y_test, test_sample_ids, train_sample_ids = _prepare_train_test(
-        df_train, df_test, covariates
-    )
+        df_train, df_test, covariates)
+
     return x_train, x_test, y_train, y_test, test_sample_ids, train_sample_ids
 
 
 def taxa_selection(pheno_df_train, readcounts_df_train, n_taxa=200):
+    """
+    Performs taxa selection based on mutual information between presence of taxa and the event.
 
+    Parameters:
+    - pheno_df_train: pandas DataFrame with clinical covariates and event information for training set.
+    - readcounts_df_train: pandas DataFrame with OTU read counts for training set.
+    - n_taxa: integer representing the number of taxa to be selected based on mutual information. Default: 200
+
+    Returns:
+    - list of feature names with length n_taxa representing selected taxa.
+    """
     if n_taxa <= 0:
         raise ValueError('n_taxa must be >0')
     event_df = pheno_df_train['Event']
@@ -446,6 +607,16 @@ def taxa_selection(pheno_df_train, readcounts_df_train, n_taxa=200):
 
 
 def diversity_metrics(readcounts_df, metric):
+    """
+    Calculates alpha diversity metrics based on the OTU read counts.
+
+    Parameters:
+    - readcounts_df: pandas DataFrame with OTU read counts.
+    - metric: string representing the alpha diversity metric to calculate.
+
+    Returns:
+    - numpy array with the calculated alpha diversity metric values.
+    """
     X = readcounts_df.to_numpy()
     ids = readcounts_df.index
     adiv = alpha_diversity(metric, X, ids).to_numpy().reshape(-1, 1)
