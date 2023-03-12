@@ -1,0 +1,17 @@
+*.csv
+*.odt
+*.sif
+.Rproj.user
+R_baseline/
+TODO.md
+config.py
+*.zip
+*.mp4
+References/
+.env
+*.pyc
+*.html
+wandb/
+notebooks/
+.vscode
+__pycache__/
