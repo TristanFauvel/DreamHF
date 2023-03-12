@@ -1,6 +1,0 @@
-username = "my_username"
-submission_name = "my_submission_name"
-password = "azerty123"
-project_id = "syn1234"
-SYNAPSE_AUTH_TOKEN ="TOKEN"
-ROOT_FOLDER = "/home/tristan/Desktop/DreamHF"
