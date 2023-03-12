@@ -69,7 +69,7 @@ class _ExtentedStepFunction:
         return "StepFunction(x=%r, y=%r, a=%r, b=%r)" % (self.x, self.y, self.a, self.b)
 
 
-def HosmerLemeshowSurvival(times, model, X_test, y_test, df=2, Q=10):
+def HosmerLemeshowSurvival(times, model, x_test, y_test, df=2, Q=10):
     """
     df = 2 # Cook-Ridler test
     df = 1 # D'Agostino-Nam test
@@ -80,7 +80,7 @@ def HosmerLemeshowSurvival(times, model, X_test, y_test, df=2, Q=10):
 
     nt = times.shape[0]
 
-    predictions = model.predict_survival_function(X_test)
+    predictions = model.predict_survival_function(x_test)
     pred_surv_prob = np.row_stack([fn(times) for fn in predictions])
 
     id_surv_prob_sorted = np.argsort(pred_surv_prob[:, -1])

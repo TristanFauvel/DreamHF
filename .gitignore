@@ -13,3 +13,5 @@ References/
 *.html
 wandb/
 notebooks/
+.vscode
+__pycache__/

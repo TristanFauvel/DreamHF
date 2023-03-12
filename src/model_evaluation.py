@@ -1,64 +1,62 @@
 import numpy as np
 import pandas as pd
-import xgboost as xgb
 from sksurv.metrics import (
     concordance_index_censored,
     concordance_index_ipcw,
-    cumulative_dynamic_auc,
     integrated_brier_score,
 )
 
 from HosmerLemeshowSurvival import HosmerLemeshowSurvival
-from xgboost_wrapper import XGBSurvival
 
 
-def evaluate_model(model, X_train, X_test, y_train, y_test):
-    preds_train = model.predict(X_train)
-    preds_test = model.predict(X_test)
+def evaluate_model(model: object, x_train: pd.DataFrame, x_test: pd.DataFrame,
+                   y_train: np.ndarray, y_test: np.ndarray) -> pd.DataFrame:
+    """
+    Evaluates the given model with the given data and returns the results.
+
+    Parameters:
+    model (object): A trained model to be evaluated.
+    x_train (pd.DataFrame): A dataframe containing the training features.
+    x_test (pd.DataFrame): A dataframe containing the testing features.
+    y_train (np.ndarray): A numpy array containing the training survival data.
+    y_test (np.ndarray): A numpy array containing the testing survival data.
+
+    Returns:
+    pd.DataFrame: A dataframe containing the evaluation results.
+
+    """
+
+    preds_train = model.predict(x_train)
+    preds_test = model.predict(x_test)
 
     event_field, time_field = y_train.dtype.names
 
-    y = np.concatenate([y_train[time_field], y_test[time_field]])
-    times = np.percentile(
-        y, np.linspace(5, 95, 15)
-    )
-    # We set the upper bound to the 95% percentile of observed time points,
-    # because the censoring rate is quite large at 91.5%.
+    y_data= np.concatenate([y_train[time_field], y_test[time_field]])
+    times = np.percentile(y_data, np.linspace(5, 95, 15))
 
-    tau = times[
-        -1
-    ]
-    #  Truncation time. The survival function for the underlying
-    # censoring time distribution needs to be positive at tau
+    tau = times[-1]
 
-    # %% Harrel's concordance index
-    # Harrel's concordance index C is defined as the proportion of
-    # observations that the model can order correctly in terms of survival times.
+    # Harrel's concordance index
     concordance_index_censored_train = concordance_index_censored(
-        y_train[event_field], y_train[time_field], preds_train
-    )
+        y_train[event_field], y_train[time_field], preds_train)
 
     concordance_index_censored_test = concordance_index_censored(
-        y_test[event_field], y_test[time_field], preds_test
-    )
+        y_test[event_field], y_test[time_field], preds_test)
 
-    # %% Uno's concordance index (based on inverse probability of censoring weights)
-
+    # Uno's concordance index (based on inverse probability of censoring weights)
     concordance_index_ipcw_train = concordance_index_ipcw(
-        y_train, y_train, preds_train, tau=tau
-    )
+        y_train, y_train, preds_train, tau=tau)
     concordance_index_ipcw_test = concordance_index_ipcw(
-        y_train, y_test, preds_test, tau=tau
-    )
+        y_train, y_test, preds_test, tau=tau)
+
     integrated_brier_score_train = np.nan
     integrated_brier_score_test = np.nan
 
-    # not isinstance(model.estimator, XGBSurvival):
     if hasattr(model, 'predict_survival_function'):
         # %% Integrated Brier score
 
         try:
-            survs = model.predict_survival_function(X_train)
+            survs = model.predict_survival_function(x_train)
             preds = np.asarray([[fn(t) for t in times] for fn in survs])
             integrated_brier_score_train = integrated_brier_score(
                 y_train, y_train, preds, times
@@ -67,7 +65,7 @@ def evaluate_model(model, X_train, X_test, y_train, y_test):
             integrated_brier_score_train = np.nan
 
         try:
-            survs = model.predict_survival_function(X_test)
+            survs = model.predict_survival_function(x_test)
             preds = np.asarray([[fn(t) for t in times] for fn in survs])
             integrated_brier_score_test = integrated_brier_score(
                 y_train, y_test, preds, times
@@ -75,9 +73,9 @@ def evaluate_model(model, X_train, X_test, y_train, y_test):
         finally:
             integrated_brier_score_test = np.nan
 
-        HL_train = HosmerLemeshowSurvival(
-            10, model, X_train, y_train, df=2, Q=10)
-        HL_test = HosmerLemeshowSurvival(10, model, X_test, y_test, df=2, Q=10)
+        hl_train = HosmerLemeshowSurvival(
+            10, model, x_train, y_train, df=2, Q=10)
+        hl_test = HosmerLemeshowSurvival(10, model, x_test, y_test, df=2, Q=10)
 
         result = {
             "Harrell C": [
@@ -92,7 +90,7 @@ def evaluate_model(model, X_train, X_test, y_train, y_test):
                 integrated_brier_score_train,
                 integrated_brier_score_test,
             ],
-            "Hosmer-Lemeshow": [f"{HL_train['pvalue']:.2e}", f"{HL_test['pvalue']:.2e}"],
+            "Hosmer-Lemeshow": [f"{hl_train['pvalue']:.2e}", f"{hl_test['pvalue']:.2e}"],
         }
     else:
         result = {

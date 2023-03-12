@@ -8,7 +8,6 @@ import pandas as pd
 from sksurv.metrics import concordance_index_censored
 
 import wandb
-from model_evaluation import evaluate_model
 from preprocessing import CLINICAL_COVARIATES, Salosensaari_processing, clr_processing
 from survival_models import (
     Coxnet,
@@ -27,14 +26,14 @@ def postprocessing(preds, sample_ids, root, filename, submission_name):
     The predictions will be saved in a single column named "Score", with the sample IDs as the index.
     If the root path is the DreamHF repository, the output directory will be "DreamHF/output/". Otherwise, the output
     directory will be "<root>/<submission_name>/output/".
-    
+
     Args:
     - preds: numpy array of shape (n_samples,) with the risk scores predicted by the model
     - sample_ids: list of strings with the sample IDs corresponding to the predictions
     - root: string representing the root path where the output directory will be created
     - filename: string representing the name of the output CSV file
     - submission_name: string representing the name of the submission, which will be used to create the output directory
-    
+
     Returns: None
     """
     # Check that the predictions do not contain NaN, +inf or -inf
@@ -78,11 +77,11 @@ def test_output_csv(root, y_train, n_test, submission_name):
 
     risk_scores_train = pd.read_csv(outdir + "scores_train.csv")
     risk_scores_train = risk_scores_train.set_index('SampleID')
-    harrell_C_training = concordance_index_censored(
+    harrell_c_training = concordance_index_censored(
         y_train['Event'], y_train['Event_time'], risk_scores_train.Score)[0]
 
     result = {
-        "Harrell C": [harrell_C_training]
+        "Harrell C": [harrell_c_training]
     }
 
     print(pd.DataFrame(result, index=["train"]))
@@ -93,7 +92,8 @@ def test_output_csv(root, y_train, n_test, submission_name):
         warnings.warn("Warning: Output file contains invalid values")
 
     if not (risk_scores.shape[0] == n_test):
-       raise AssertionError("Incorrect number of test cases in the output file")
+        raise AssertionError(
+            "Incorrect number of test cases in the output file")
 
 
 def experiment_pipeline(n_taxa, n_iter, pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, ROOT, submission_name):
@@ -121,34 +121,36 @@ def experiment_pipeline(n_taxa, n_iter, pheno_df_train, pheno_df_test, readcount
                            'BPTreatment',
                            'PrevalentDiabetes',
                            'PrevalentCHD',
-                           #'PrevalentHFAIL',
+                           # 'PrevalentHFAIL',
                            'SystolicBP',
                            'NonHDLcholesterol',
                            'Sex']  # CLINICAL_COVARIATES
 
     if processing == 'Salosensaari':
         # Run Salosensaari processing
-        X_train, X_test, y_train, y_test, test_sample_ids, train_sample_ids = Salosensaari_processing(
+        x_train, x_test, y_train, y_test, test_sample_ids, train_sample_ids = Salosensaari_processing(
             pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates
         )
     elif processing == 'MI_clr':
         # Run feature selection using clr_processing
-        X_train, X_test, y_train, y_test, test_sample_ids, train_sample_ids = clr_processing(
+        x_train, x_test, y_train, y_test, test_sample_ids, train_sample_ids = clr_processing(
             pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test, clinical_covariates,  n_taxa)
+    else:
+        raise ValueError('Invalid processing')
 
     # Choose the best model based on performance on the validation set
     best_model = 'CoxPH'
 
     n_test = pheno_df_test.shape[0]
     # Run the chosen model on the training and test data
-    model = run_experiment(best_model, n_taxa, n_iter, X_train, X_test, y_train,
-                           test_sample_ids, train_sample_ids, ROOT, n_test, submission_name)
+    run_experiment(best_model, n_taxa, n_iter, x_train, x_test, y_train,
+                   test_sample_ids, train_sample_ids, ROOT, n_test, submission_name)
 
     print("Task completed.")
     return
 
 
-def run_experiment(model_name, n_taxa, n_iter, X_train, X_test, y_train, test_sample_ids, train_sample_ids, ROOT, n_test, submission_name):
+def run_experiment(model_name, n_taxa, n_iter, x_train, x_test, y_train, test_sample_ids, train_sample_ids, ROOT, n_test, submission_name):
     """
     Runs the selected model on the training and test data.
 
@@ -156,8 +158,8 @@ def run_experiment(model_name, n_taxa, n_iter, X_train, X_test, y_train, test_sa
         model_name (str): name of the model to use
         n_taxa (int): number of taxa to use in feature selection
         n_iter (int): number of iterations for cross-validation
-        X_train (numpy ndarray): microbiome data for the training set
-        X_test (numpy ndarray): microbiome data for the test set
+        x_train (numpy ndarray): microbiome data for the training set
+        x_test (numpy ndarray): microbiome data for the test set
         y_train (numpy ndarray): survival data for the training set
         test_sample_ids (list): list of sample IDs for the test set
         train_sample_ids (list): list of sample IDs for the training set
@@ -168,13 +170,13 @@ def run_experiment(model_name, n_taxa, n_iter, X_train, X_test, y_train, test_sa
     Returns:
         model: the trained model
     """
-    
+
     config = dict(
         # xgbse_weibull, sksurv_gbt, xgb_aft, xgb_optuna, CoxPH
         #  xgbse_weibull : not ok
         # Coxnet : ok, IPCRidge_sksurv
         #  CoxPH : ok, sksurv_gbt : ok, xgb_aft: ok, but severe overfitting (0.9676036909132226, 0.6376541333063073)
-        model_name=model_name, 
+        model_name=model_name,
         n_iter=n_iter,
     )
 
@@ -192,26 +194,26 @@ def run_experiment(model_name, n_taxa, n_iter, X_train, X_test, y_train, test_sa
 
     print("Processing the data...")
 
-    wandb_config = wandb.config 
+    wandb_config = wandb.config
 
-    
     #model = eval(wandb_config.model_name +                  f'(with_pca = {wandb_config.with_pca}, n_components = {wandb_config.n_components})')
 
     model = eval(wandb_config.model_name + '(' + str(n_taxa) + ')')
 
     # %%
     print("Search for optimal hyperparameters...")
-    model = model.cross_validation(X_train, y_train, n_iter)
+    model = model.cross_validation(x_train, y_train, n_iter)
 
-    preds_test = model.risk_score(X_test)    
-    postprocessing(preds_test, test_sample_ids, ROOT, "scores.csv", submission_name)
-                   
-    preds_train = model.risk_score(X_train)    
+    preds_test = model.risk_score(x_test)
+    postprocessing(preds_test, test_sample_ids, ROOT,
+                   "scores.csv", submission_name)
+
+    preds_train = model.risk_score(x_train)
     postprocessing(preds_train, train_sample_ids, ROOT,
                    "scores_train.csv", submission_name)
-    
+
     test_output_csv(ROOT, y_train, n_test, submission_name)
-    
+
     run.finish()
     return model
 

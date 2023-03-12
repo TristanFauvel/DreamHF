@@ -6,6 +6,8 @@ import random
 import sys
 import warnings
 
+import sklearn
+
 from pipeline import experiment_pipeline
 from preprocessing import load_data
 
@@ -13,16 +15,10 @@ random.seed(10)
 
 arguments = sys.argv
 
-# sklearn.set_config(transform_output="pandas")
-
-# Checklist :
-# - check submission name
-# - set arguments
-# - choose the model in pipeline
-# - choose n_taxa and n_iter
+sklearn.set_config(transform_output="pandas")
 
 ############################################################
-#arguments = [0, '/home/tristan/Desktop/Repos/DreamHF']
+arguments = [0, '/home/tristan/Desktop/Repos/DreamHF']
 ############################################################
 
 
@@ -46,7 +42,7 @@ pheno_df_train, pheno_df_test, readcounts_df_train, readcounts_df_test = load_da
 print("Data loaded. ")
 
 N_TAXA = 0
-N_ITER = 1000  # Number of hyperaparameters to test
+N_ITER = 10  # Number of hyperaparameters to test, use 1000 for the challenge
 
 # %%
 experiment_pipeline(N_TAXA, N_ITER, pheno_df_train, pheno_df_test,

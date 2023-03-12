@@ -1,5 +1,4 @@
 # %%
-import math
 import os
 from typing import List
 
@@ -80,33 +79,34 @@ def newickify_taxonomy(df: pd.DataFrame) -> str:
 
     Returns:
         str: A string that represents the taxonomy tree in Newick format.
-    """ 
-    
+    """
+
     df.insert(0, "root", ["root"]*df.shape[0], True)
 
     # Convert a dataframe into tree-like dictionary
 
     node_to_children = {}
 
-    #iterate over dataframe row-wise. Assuming that every row stands for one complete branch of the tree
+    # iterate over dataframe row-wise. Assuming that every row stands for one complete branch of the tree
     for row in df.itertuples():
-        #remove index at position 0 and elements that contain no child ("")
+        # remove index at position 0 and elements that contain no child ("")
         if REMOVE_VIRUSES:
             if row[2] == 'k__Viruses':
                 continue
-        row_list = [element for element in row[1:] if (element != "" and isinstance(element, str))]
+        row_list = [element for element in row[1:] if (
+            element != "" and isinstance(element, str))]
         for i in range(len(row_list)-1):
             if row_list[i] in node_to_children.keys():
-                #parent entry already existing
+                # parent entry already existing
                 if row_list[i+1] in node_to_children[row_list[i]].keys():
-                    #entry itself already existing --> next
+                    # entry itself already existing --> next
                     continue
                 else:
-                    #entry not existing --> update dict and add the connection
-                    node_to_children[row_list[i]].update({row_list[i+1]:0})
+                    # entry not existing --> update dict and add the connection
+                    node_to_children[row_list[i]].update({row_list[i+1]: 0})
             else:
-                #add the branching point
-                node_to_children[row_list[i]] = {row_list[i+1]:0}
+                # add the branching point
+                node_to_children[row_list[i]] = {row_list[i+1]: 0}
 
     taxonomy_newick = _newickify(node_to_children, root_node='root')
     return taxonomy_newick
@@ -124,22 +124,24 @@ def get_taxa_list() -> List[str]:
     root = os.environ.get("root_folder")
 
     tax_train = pd.read_csv(root + '/train/taxtable.csv')
-    
+
     df = tax_train
     df.insert(0, "root", ["root"]*df.shape[0], True)
 
-    #iterate over dataframe row-wise. Assuming that every row stands for one complete branch of the tree
+    # iterate over dataframe row-wise. Assuming that every row stands for one complete branch of the tree
     taxa = []
     for row in df.itertuples():
         if REMOVE_VIRUSES:
             if row[2] == 'k__Viruses':
                 continue
-        #remove index at position 0 and elements that contain no child ("")
-        row_list = [element for element in row[1:] if (element != "" and isinstance(element, str))]
+        # remove index at position 0 and elements that contain no child ("")
+        row_list = [element for element in row[1:] if (
+            element != "" and isinstance(element, str))]
         row_content = ';'.join(row_list[1:])
         taxa.append(row_content)
     taxa = np.array(taxa)
     return taxa
+
 
 def convert_to_taxtable(input: List[str]) -> pd.DataFrame:
     """
@@ -152,5 +154,6 @@ def convert_to_taxtable(input: List[str]) -> pd.DataFrame:
     Returns:
         pd.DataFrame: a Pandas dataframe with columns: Domain, Phylum, Class, Order, Family, Genus, Species
     """
-    df = pd.DataFrame([sub.split(";") for sub in input], columns= ['Domain','Phylum','Class','Order','Family','Genus','Species'])
+    df = pd.DataFrame([sub.split(";") for sub in input], columns=[
+                      'Domain', 'Phylum', 'Class', 'Order', 'Family', 'Genus', 'Species'])
     return df
